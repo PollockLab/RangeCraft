@@ -76,6 +76,7 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 #versions .more button { min-height:0; padding:.1rem .5rem; font-size:.8rem; }
 /* floating draw toolbar, on the map (icon over a tiny label on mobile) */
 #tools { position:absolute; top:.5rem; left:calc(var(--pw) + .5rem); z-index:3; max-width:calc(100% - var(--pw) - 4rem); }
+#tools { pointer-events:none; } #tools > * { pointer-events:auto; } /* the empty box beside the hint must not swallow map clicks */
 #tools .bar { display:flex; gap:.25rem; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:.25rem; box-shadow:0 1px 4px rgba(0,0,0,.2); }
 #tools button, #tools label.btn { min-height:2rem; display:inline-flex; align-items:center; gap:.3rem; padding:.2rem .5rem; font-size:.85rem; font-weight:400; border:1px solid var(--line); border-radius:6px; cursor:pointer; background:var(--bg); }
 #tools [hidden] { display:none; }
@@ -113,6 +114,10 @@ footer p { margin:.3rem 0; }
   .info > summary { min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
   input[type=checkbox] { width:24px; height:24px; }
   #legend { left:.5rem; }
+}
+@media (max-width: 700px) and (pointer: coarse) { /* the bar is full, so Undo/Redo stack in the free column at its right (no zoom control on touch) */
+  #tools #h-undo, #tools #h-redo { position:absolute; right:-3rem; width:44px; height:44px; min-height:44px; padding:0; flex-direction:column; justify-content:center; }
+  #tools #h-redo { top:48px; }
 }
 @media (max-width: 700px) {
   :root { --pw:100%; }

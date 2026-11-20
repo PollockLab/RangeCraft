@@ -1,6 +1,7 @@
 // Terra Draw wiring: polygon, freehand, add/cut sketch and edit modes on the MapLibre map. The official outline
 // is a plain map layer, so it never enters this store.
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawFreehandMode, TerraDrawSelectMode, TerraDrawRenderMode } from 'terra-draw';
+import { createUndo } from './undo.js';
 import { TerraDrawMapLibreGLAdapter } from 'https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.module.js';
 
 // Terra Draw's polygon mode hard-codes a "Feature has holes" check. Holes are plain GeoJSON and render and survive vertex edits
@@ -37,10 +38,21 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   let selected = null;
   td.on('select', id => { selected = id; onSelect(id); });
   td.on('deselect', () => { selected = null; onSelect(null); });
+  // Undo/redo: snapshots of the finished polygons (never helper points), recorded when a change ends.
+  const undo = createUndo(50);
+  const snap = () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing)
+    .map(({ geometry, properties: { mode, iucn } }) => structuredClone({ geometry, properties: { mode, ...(iucn && { iucn }) } }));
+  const restore = s => {
+    td.clear(); selected = null; onSelect(null);
+    td.addFeatures(s.map(f => ({ type: 'Feature', ...structuredClone(f) })));
+    onChange();
+    return true;
+  };
+  undo.reset([]);
   // Add/Cut tools draw with the freehand mode; the finished sketch is handed to onSketch(op, polygon) and removed.
   let sketchOp = null;
   td.on('finish', (id, ctx) => {
-    if (!sketchOp) { onChange(); if (ctx?.action === 'draw') onDrawn(); return; }
+    if (!sketchOp) { undo.record(snap()); onChange(); if (ctx?.action === 'draw') onDrawn(); return; }
     const f = td.getSnapshot().find(x => x.id === id);
     td.removeFeatures([id]);
     if (f) onSketch(sketchOp, f.geometry);
@@ -55,7 +67,11 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
     // Finished polygons only, not helper points or the one being drawn.
     all: () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing),
     setCodes: (id, iucn) => td.updateFeatureProperties(id, { iucn }),
-    removeSelected() { if (selected == null) return false; td.removeFeatures([selected]); selected = null; onSelect(null); onChange(); return true; },
+    removeSelected() { if (selected == null) return false; td.removeFeatures([selected]); selected = null; onSelect(null); undo.record(snap()); onChange(); return true; },
+    canUndo: undo.canUndo, canRedo: undo.canRedo,
+    undo() { const s = undo.undo(); return s ? restore(s) : false; },
+    redo() { const s = undo.redo(); return s ? restore(s) : false; },
+    resetHistory: () => undo.reset(snap()),
     // Replace the store with the polygons in gj; returns how many were added.
     load(gj) {
       const polys = partsOf(gj);
@@ -63,6 +79,7 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
       onChange();
       const res = td.addFeatures(polys.map(({ geometry, iucn }) => ({ type: 'Feature', geometry, properties: { ...(iucn && { iucn }), mode: 'polygon' } })));
       const bad = res.filter(r => !r.valid);
+      undo.record(snap());
       onChange();
       if (bad.length) throw new Error(`${bad.length} of ${polys.length} polygons are invalid: ${bad[0].reason}`);
       return polys.length;

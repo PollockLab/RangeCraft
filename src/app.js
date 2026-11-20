@@ -19,6 +19,7 @@ import { initSteps } from './steps.js';
 import { initSaved } from './saved.js';
 import { initRelayUi } from './relay-ui.js';
 import { initPatch } from './patch-ui.js';
+import { initUndoUi } from './undo-ui.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -64,7 +65,8 @@ const syncTools = () => {
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); };
+const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); undoUi(); };
+const undoUi = initUndoUi({ $, draw: () => draw, patch: { active: () => !!state.patch }, say });
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 const lineage = initHistory({ map, state, say, edit: r => editRange(r), view: (k, d) => patch.view(k, d) });
@@ -129,7 +131,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   say('');
   state.taxon = { key: String(key), name };
   state.copy = null;
-  lineage.clear(); patch.exit();
+  lineage.clear(); patch.exit(); draw?.resetHistory(); undoUi();
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('selected').hidden = $('intro').hidden = true; if (!$('how').dataset.seen) { $('how').dataset.seen = '1'; $('how').open = false; } // collapse on the first pick only; rc-how is untouched
