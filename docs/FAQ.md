@@ -36,6 +36,16 @@ Yes. An export records the source a copy was derived from (for example the commu
 Range check counts GBIF records in square bins against the range it names in the summary ("vs official outline", "vs your draft", or the ticked source such as "vs USGS GAP"). Red bins have records outside the range, so the range may be too small, or some records are misidentified. Blue bins are inside the range with no records yet, which usually reflects sampling effort or habitat, not absence. A high red share can come from where observers go.
 
 Coverage matters too. A source with a coverage note, such as USGS GAP (conterminous US only), is compared only inside that area, approximated by a box. Bins outside it are hatched grey, meaning not mapped by this source, and are left out of the percentages. Records in Canada are therefore not counted against a GAP range.
+When the species has a habitat model (the Habitat model layer, from openbiodiversity.ca), each bin is also scored for suitability. "Suitable" means a score at least as high as the one 90% of in-range bins with records reach. The summary states this threshold. Bins are then split further:
+
+- Red: records outside the range in suitable habitat. The range is likely too small.
+- Dark red: records outside the range in unsuitable habitat. Check the IDs ("Help verify these IDs on iNaturalist" in the popup) or the model.
+- Blue: inside the range, suitable, no records yet. Check survey effort.
+- Grey: inside the range, low suitability. Check the range edge.
+- Teal: suitable bins just outside the range with no records. These are worth surveying. "Survey targets (CSV)" downloads the 50 best as a list with iNaturalist and GBIF links.
+
+The habitat model is itself a model, so treat a disagreement between it, the range and the records as a question to check, not a verdict. Suitability is read at each bin's centre only.
+
 
 ## Can I trace the official outline?
 
