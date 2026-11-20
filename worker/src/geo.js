@@ -3,9 +3,9 @@
 // ratio; CI (rangelib.load_range) is the full check and fails the PR if either matters.
 export class RangeError extends Error {}
 
-const MAX_PARTS = 200, MAX_BBOX_RATIO = 50, BASES = ['expert-outline-edit', 'new'];
+const MAX_PARTS = 200, MAX_BBOX_RATIO = 50, BASES = ['expert-outline-edit', 'new', 'official-patch'];
 // Client properties we keep. Everything else (github, orcid, inat_login, identity, submitter...) is dropped.
-const KEEP = ['taxonKey', 'scientificName', 'author', 'sources', 'basis', 'parent', 'derived_from', 'derived_from_license'];
+const KEEP = ['taxonKey', 'scientificName', 'author', 'sources', 'basis', 'parent', 'derived_from', 'derived_from_license', 'base', 'message'];
 
 const ringArea = r => Math.abs(r.reduce((s, [x1, y1], i) => { const [x2, y2] = r[(i + 1) % r.length]; return s + x1 * y2 - x2 * y1; }, 0)) / 2;
 
@@ -52,6 +52,7 @@ export function cleanProps(fc, session, today) {
   if (session.verified || !p.author) p.author = session.name;
   if (p.basis && !BASES.includes(p.basis)) throw new RangeError(`basis must be one of ${BASES.join(', ')}`);
   if (p.basis === 'expert-outline-edit' && !p.derived_from) throw new RangeError('basis expert-outline-edit requires derived_from');
+  if (p.basis === 'official-patch' && (!p.base || fc.features.some(f => !['add', 'cut'].includes(f.properties?.op)))) throw new RangeError("basis official-patch requires base and op 'add' or 'cut' on every feature");
   return { ...p, created: today, submitter: { provider: session.provider, id: session.id, ...(session.login && { login: session.login }), name: session.name, verified: !!session.verified } };
 }
 
@@ -61,7 +62,7 @@ export function buildFile(fc, session, now = new Date()) {
   const props = cleanProps(fc, session, now.toISOString().slice(0, 10));
   return {
     type: 'FeatureCollection',
-    features: fc.features.map(f => ({ type: 'Feature', properties: { ...props }, geometry: { type: f.geometry.type, coordinates: f.geometry.coordinates } })),
+    features: fc.features.map(f => ({ type: 'Feature', properties: { ...props, ...(props.basis === 'official-patch' && { op: f.properties.op }) }, geometry: { type: f.geometry.type, coordinates: f.geometry.coordinates } })),
     properties: props,
   };
 }

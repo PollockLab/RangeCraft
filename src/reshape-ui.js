@@ -3,7 +3,7 @@ import polygonClipping from 'https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.
 import { reshape, carryCodes } from './reshape.js';
 
 const $ = id => document.getElementById(id);
-const CUT_OFF = 'Copy a range first (Edit a copy) or draw one';
+const CUT_OFF = 'Copy a range first (Edit a range) or draw one';
 
 export function initReshape({ draw, say }) {
   let prev = null; // FeatureCollection of the polygons before the last Add or Cut; any other change to the drawing clears it

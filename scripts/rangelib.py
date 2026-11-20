@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RANGES_DIR = ROOT / "data" / "ranges"
 EARTH_R_KM = 6371.0088
 REQUIRED = ("taxonKey", "author", "created")
-BASES = ("expert-outline-edit", "new")
+BASES = ("expert-outline-edit", "new", "official-patch")
 PERMISSIVE_LICENSES = ("CC0", "CC-BY-4.0", "OGL-Canada-2.0", "US-PD")
 MAX_PARTS = 200
 MAX_BBOX_RATIO = 50  # bbox area / geometry area; blocks sparse specks that inflate hits
@@ -77,11 +77,14 @@ def load_range(path: Path, today: date | None = None) -> dict:
         raise RangeError("submitter must be {provider, id, name, verified} from the relay")
     if meta.get("basis") is not None and meta["basis"] not in BASES:
         raise RangeError(f"basis must be one of {', '.join(BASES)}")
-    for k in ("parent", "inat_login", "derived_from", "derived_from_license"):
+    for k in ("parent", "base", "message", "inat_login", "derived_from", "derived_from_license"):
         if meta.get(k) is not None and not isinstance(meta[k], str):
             raise RangeError(f"{k} must be a string")
     if meta.get("basis") == "expert-outline-edit" and not meta.get("derived_from"):
         raise RangeError("basis expert-outline-edit requires derived_from (the source outline)")
+    if meta.get("basis") == "official-patch" and (
+            not meta.get("base") or not all((f.get("properties") or {}).get("op") in ("add", "cut") for f in feats)):
+        raise RangeError("official-patch requires base and an op (add or cut) on every feature")
     geoms = []
     for i, f in enumerate(feats):
         try:

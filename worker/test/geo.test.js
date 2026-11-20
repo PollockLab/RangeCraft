@@ -64,3 +64,14 @@ test('author falls back to the session name; basis rules', () => {
 });
 
 test('slug', () => { assert.equal(slug('Ann O\'Neil!'), 'ann-o-neil'); assert.equal(slug(''), 'anon'); assert.equal(slug('../x'), 'x'); });
+
+test('official patches keep base, message and per-feature op', () => {
+  const patch = fc({ basis: 'official-patch', base: 'lithobates-sylvaticus', message: 'Add Gaspé' });
+  assert.throws(() => buildFile(patch, S), /op 'add' or 'cut'/);
+  patch.features[0].properties = { op: 'cut' };
+  const out = buildFile(patch, S);
+  assert.equal(out.properties.base, 'lithobates-sylvaticus');
+  assert.equal(out.properties.message, 'Add Gaspé');
+  assert.equal(out.features[0].properties.op, 'cut');
+  assert.throws(() => buildFile(fc({ basis: 'official-patch' }), S), /requires base/);
+});

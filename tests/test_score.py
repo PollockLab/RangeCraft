@@ -184,6 +184,16 @@ def test_outline_edit_requires_derived_from(tmp_path):
     assert load_range(_write(sub, ok))["meta"]["derived_from"]
 
 
+def test_official_patch_needs_base_and_ops(tmp_path):
+    with pytest.raises(RangeError, match="official-patch"):
+        load_range(_write(tmp_path, _fc(basis="official-patch", base="slug")))
+    ok = _fc(basis="official-patch", base="slug", parent="slug", message="m")
+    ok["features"][0]["properties"] = {"op": "cut"}
+    sub = tmp_path / "b"
+    sub.mkdir()
+    assert load_range(_write(sub, ok))["meta"]["base"] == "slug"
+
+
 def _write(tmp_path, doc, key="123"):
     d = tmp_path / key
     d.mkdir()

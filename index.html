@@ -86,7 +86,8 @@
             <div class="lyr">
               <span class="check"><i class="sw dashed"></i> Official range</span>
               <button id="official-load" type="button">Show</button>
-              <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>ECCC/IUCN expert outline: reference only, not redistributed. Coarse outlines can spill past coastlines. Do not trace or copy it: its license does not allow republishing under CC BY 4.0.</p></details>
+              <button id="official-edit" type="button" title="Add and cut your own shapes on top of the outline. Only your shapes are saved, never the outline.">Edit (saved as a patch)</button>
+              <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>ECCC/IUCN expert outline: reference only, not redistributed. Edits are saved as your own add and cut shapes applied on top of it, never as copies of the outline.</p></details>
             </div>
             <p class="sub"><span id="official-note"></span> <a id="gbif-out" target="_blank" rel="noopener" href="#">All records on GBIF</a></p>
             <div class="lyr">
@@ -125,6 +126,7 @@
           <p id="eoo-countries" class="muted"></p>
           <div id="propose-form" hidden>
             <div class="field"><label for="author">Display name</label><input id="author" autocomplete="name"></div>
+            <div class="field" id="change-field" hidden><label for="change-msg">What changed and why (required)</label><input id="change-msg" maxlength="200" placeholder="e.g. Extend breeding range to Gaspé per 2024 surveys"></div>
             <div class="field"><label for="sources">Sources and evidence (required)</label><textarea id="sources" rows="2" placeholder="Cite specimens (catalogue no.), records (GBIF/iNat IDs) or publications that justify each change"></textarea></div>
             <details id="me">
               <summary>More about you (optional)</summary>

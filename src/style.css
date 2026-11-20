@@ -65,7 +65,12 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 #versions > li { padding:.15rem 0; }
 #versions .lyr .check { overflow:hidden; }
 #versions .lyr label { font-weight:400; font-size:.9rem; }
-#versions .lyr .edit { flex:none; }
+#versions .lyr .edit, #versions .lyr .hist { flex:none; }
+.hist-panel { margin:.2rem 0 .4rem 1.4rem; font-size:.8rem; border-left:3px solid var(--muted); padding-left:.5rem; }
+.hist-panel .rev { display:block; text-align:left; min-height:0; padding:.15rem .4rem; margin:.1rem 0; font-size:.8rem; }
+.hist-panel .rev { width:100%; white-space:normal; overflow-wrap:anywhere; }
+.hist-panel .rev[aria-pressed=true] { background:#fff; color:inherit; outline:2px solid #2a9d3f; }
+.hist-panel .rev[aria-pressed=true] .muted { color:var(--muted); }
 #versions .more-btn { min-height:0; padding:0 .4rem; background:none; border:0; color:var(--muted); }
 #versions .more { margin:.1rem 0 .3rem 1.4rem; font-size:.8rem; }
 #versions .more button { min-height:0; padding:.1rem .5rem; font-size:.8rem; }
@@ -100,7 +105,7 @@ footer p { margin:.3rem 0; }
 @media (max-width: 600px) {
   #legend .lg-toggle { display:block; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
   #legend:not(.open) > div { display:none; }
-  #tools button, #tools label.btn, .chip, button.edit, [role=tab], #share, .linkbtn, input { min-height:44px; }
+  #tools button, #tools label.btn, .chip, button.edit, button.hist, .hist-panel button, [role=tab], #share, .linkbtn, input { min-height:44px; }
   #how #how-close, #rc-targets, #rc-blitz, #official-load { min-height:44px; }
   #rc-blitz { display:inline-flex; align-items:center; }
   .info > summary { min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
@@ -143,3 +148,4 @@ footer p { margin:.3rem 0; }
 #steps button[aria-current=step] { color:var(--fg); font-weight:600; border-color:var(--accent); }
 @media (max-width: 600px) { #steps button { min-height:44px; } }
 input[aria-invalid=true] { outline:2px solid #c62828; outline-offset:1px; border-color:#c62828; }
+.timeline { margin:.2rem 0; padding-left:1.2rem; font-size:.85rem; }
