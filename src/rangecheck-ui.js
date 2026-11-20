@@ -10,7 +10,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   const PLAIN = { outside: 'records outside range (range may be too small, or misIDs)', gap: 'no records yet (check effort or habitat)', unmapped: 'not mapped by this source' };
   const HABITAT = { outside: 'outside range, suitable, with records: range likely too small', outsideLow: 'outside range, low suitability, with records: check IDs or the model',
     gap: 'in range, suitable, no records yet (check effort)', lowgap: 'in range, low suitability (check the range edge)', survey: 'outside range, suitable, no records: worth surveying', unmapped: PLAIN.unmapped };
-  let LABELS = PLAIN, present = new Set(), threshold = null;
+  let LABELS = PLAIN, present = new Set(), threshold = null, targets = '';
   // Samples the raw habitat model over the box in one request; null when it cannot be read.
   async function loadSuit(slug, box) {
     try {
@@ -30,6 +30,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     if (map.getSource('rc')) map.removeSource('rc');
     $('rc-toggle').checked = false;
     $('rc-summary').textContent = msg;
+    $('rc-targets').hidden = true;
     onChange();
   }
   // What the check compares against: { fc, ref, coverage }. A drawing wins, then the official outline, then the ticked community ranges.
@@ -80,10 +81,19 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         'fill-color': ['match', ['get', 'status'], 'outside', rc.COLORS.outside, 'outsideLow', rc.COLORS.outsideLow, 'lowgap', rc.COLORS.lowgap, 'survey', rc.COLORS.survey, rc.COLORS.gap],
         // red fades for stray records: 1-2 records are faint, 100+ solid
         'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
-      $('rc-summary').textContent = rc.summaryLine(res, ref, coverage && 'conterminous US') + ' ' + rc.sdmNote(res, why);
+      $('rc-summary').textContent = [rc.summaryLine(res, ref, coverage && 'conterminous US'), rc.habitatLine(res), rc.sdmNote(res, why)].filter(Boolean).join(' ');
+      targets = rc.surveyCsv(res.cells, taxon);
+      $('rc-targets').hidden = targets.split('\n').length < 3;
       onChange();
     } catch (e) { if (!stale()) clear(`Range check failed: ${e.message}`); }
   }
+  $('rc-targets').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([targets], { type: 'text/csv' }));
+    a.download = `${state.taxon.name.replace(/\W+/g, '-').toLowerCase()}-survey-targets.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
   $('rc-toggle').addEventListener('change', e => { if (e.target.checked) runRangeCheck(); else clear(); });
   // Re-run when the compared layer changes (official toggle, ticks, drawing); debounced because drawing fires many changes.
   let timer;
