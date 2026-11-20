@@ -1,0 +1,40 @@
+# Range data sources
+
+Checked live on 2026-11-19. "Verified" means the URL was fetched or the DOI resolved through Crossref on that date. Anything marked unverified could not be confirmed from the primary page (blocked, missing, or not fetched) and is treated as not redistributable.
+
+Each imported source is written as its own range file (`data/ranges/<GBIF taxonKey>/<source>.geojson`), so every source is a separate voter and agreement across sources is meaningful. Geometry is imported only where the licence permits republishing under CC BY 4.0, by `scripts/import_ranges.py`. Everything else is linked from `data/references.json`.
+
+## Sources
+
+| Source | Taxon group | Citation | Licence | Republish geometry | Imported |
+|---|---|---|---|---|---|
+| USGS GAP species range maps (CONUS) | Amphibians, reptiles, birds, mammals of the conterminous US | USGS GAP, 2018, https://doi.org/10.5066/F7Q81B3R (per species, e.g. Wood Frog https://doi.org/10.5066/F7SX6C9X) | US public domain, "USGS-authored or produced data and information are considered to be in the U.S. Public Domain" (verified, https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits). ScienceBase item `rights` is empty and the file metadata asks users to acquire the data from USGS (verified) | Yes, with attribution as a courtesy | Yes, 13 taxa. Covers CONUS only, so Canadian ranges are partial |
+| DFO Species at Risk Distribution (Range) | Aquatic SARA species: marine mammals, sea turtles, fishes, molluscs | Fisheries and Oceans Canada, https://open.canada.ca/data/en/dataset/e0fabad5-9379-4077-87b9-5705f28c490b | Open Government Licence - Canada, `license_id: ca-ogl-lgo` (verified through the open.canada.ca CKAN API; licence text https://open.canada.ca/en/open-government-licence-canada). Service: https://egisp.dfo-mpo.gc.ca/arcgis/rest/services/open_data_donnees_ouvertes/dfo_sara_distribution/MapServer | Yes | Yes, 3 taxa |
+| ECCC / COSEWIC range maps | SARA terrestrial species | https://open.canada.ca/ | OGL-Canada for the datasets found (verified for DFO only). Four CKAN searches (range maps, species ranges, SARA distribution, wildlife range polygon) surfaced no per-species ECCC range layer in the top results, only the DFO one | Yes where OGL-Canada | No: no per-species layer found (search was shallow) |
+| Atlas of Canada, Ranges of Principal Mammals / Birds | 20 condensed mammal maps, 3rd edition (1957) | https://open.canada.ca/data/en/dataset/c97a278f-e5d4-5910-86a6-2ad3b1877c54 | OGL-Canada (verified through CKAN for the mammals dataset) | Only as JPG/PDF scans, no vectors | No |
+| GARD 1.7 reptile ranges | All terrestrial reptiles | Roll et al. 2017, Nat Ecol Evol, https://doi.org/10.1038/s41559-017-0332-2 (verified). Data: https://doi.org/10.5061/dryad.9cnp5hqmb | CC0 (verified in the Dryad API, 858 MB shapefile) | Yes | No: Dryad refuses anonymous downloads (HTTP 401 on the API, 403 on file_stream) and the file is one 855 MB shapefile. Needs a Dryad token and a one-off local extraction |
+| PHYLACINE 1.2 mammals | All mammals, 128 km present-natural range rasters | Faurby et al. 2018, Ecology, https://doi.org/10.1002/ecy.2443 (verified). Data: https://doi.org/10.5061/dryad.bp26v20 (CC0, verified in Dryad API) and https://doi.org/10.5281/zenodo.3690867 (v1.2.1, Zenodo licence `other-open`, anonymous download, 106 MB) | CC0 on Dryad | Yes, but ranges are coarse (128 km cells) and are modelled from IUCN ranges, so the upstream IUCN terms may still bind (unverified) | No: raster only, needs a GeoTIFF reader and cell vectorising |
+| IUCN Red List spatial data | All assessed taxa | IUCN, https://www.iucnredlist.org/resources/spatial-data-download | Unverified: the terms pages returned HTTP 403 to automated fetches. Understood to be non-commercial use with no redistribution | No | No |
+| BirdLife International / HBW (BOTW) | Birds | BirdLife International and Handbook of the Birds of the World, Bird species distribution maps of the world (version unverified) | Not open: the data page offers a request form for non-commercial use and routes commercial use through IBAT (verified, https://datazone.birdlife.org/contact-us/request-our-data) | No | No |
+| NatureServe (incl. Page & Burr fish ranges) | Fishes, amphibians, reptiles, mammals | Page and Burr 2011, Peterson Field Guide to Freshwater Fishes of North America, 2nd ed., Houghton Mifflin Harcourt (book, no DOI). NatureServe https://explorer.natureserve.org | Unverified: the terms URL tried returned 404. Treated as restricted | No | No |
+| Map of Life | Aggregator of the above | Jetz et al. 2012, Trends Ecol Evol 27, https://doi.org/10.1016/j.tree.2011.09.007 (verified) | Unverified: no data terms were found on https://mol.org/about. Underlying licences are those of each provider | No | No |
+| eBird Status and Trends | Birds, modelled relative abundance, not a range | Fink et al. 2020, Ecological Applications 30, https://doi.org/10.1002/eap.2056 (verified) | Unverified (terms page not fetched) | No | No |
+| iNaturalist taxon ranges | All taxa that have a range | https://www.inaturalist.org/pages/range_maps (blocked by Cloudflare, HTTP 403, so its text is unverified) | Not exposed. `GET /v1/taxa/{id}` and `/v2/taxa/{id}?fields=all` carry no range, source, uploader or licence field (verified). `https://www.inaturalist.org/taxa/<id>/range.kml` returns geometry with an empty name and description and no source (verified for taxon 27229). `range.geojson`, `/taxon_ranges/...` and the taxon HTML page return 403/404. Many ranges are uploaded from IUCN data | No | Link only, in `data/references.json` |
+
+Why iNaturalist ranges are not imported: the per-range source and licence cannot be read from any endpoint that works without a browser, so redistribution cannot be shown to be allowed. Linking is safe.
+
+## iNaturalist experts
+
+`scripts/inat_experts.py` uses the public API: `GET /v1/taxa?q=<name>&rank=species`, `GET /v1/observations/identifiers` and `GET /v1/observations/observers` with `quality_grade=research`. Only login, public display name (null when unset), icon URL and count are stored. Spam and suspended accounts are dropped. Following What to ID, only activity that is already public on iNaturalist is shown (identifications and observations), no tokens or private fields are kept, and users are shown by their public login.
+
+## Limits of expert range maps
+
+- Hurlbert and Jetz 2007, PNAS 104:13384-13389, https://doi.org/10.1073/pnas.0704469104 (verified): range maps are extent-of-occurrence outlines, so a species is absent from many places inside its range. They match real occurrence only at coarse, undefined resolution, and using them at fine grain can mislead richness and hotspot results.
+- Merow, Wilson and Jetz 2017, Global Ecology and Biogeography 26:243-258, https://doi.org/10.1111/geb.12539 (verified): expert maps suit coarse resolution and delineating unoccupied regions, while point records give finer scale but are biased. The paper combines the two.
+- Ficetola et al. 2014, Journal of Biogeography 41:211-221, https://doi.org/10.1111/jbi.12206 (verified; published online 2013): error in Global Amphibian Assessment range maps was measured as the share of point records falling inside the polygon, and fit varied strongly among continents and with data quality.
+
+Consequence for RangeCraft: one map is one opinion. Separate files per source allow agreement between sources to be shown, and prospective GBIF records score each range against independent evidence.
+
+## Not done
+
+GARD and PHYLACINE are licence-clear (CC0) but not imported, see the table. The only non-GAP, non-iNat vector sources imported are DFO mammals and reptiles. Amphibians and birds currently have GAP only.

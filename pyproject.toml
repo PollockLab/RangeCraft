@@ -3,7 +3,12 @@ name = "rangecraft"
 version = "0.1.0"
 description = "Expert species range maps scored by prospective GBIF evidence"
 requires-python = ">=3.10"
-dependencies = ["shapely>=2", "requests"]
+dependencies = [
+    "shapely>=2",
+    "requests",
+    "pyshp>=3.1.9",
+    "pyproj>=3.7.1",
+]
 
 [dependency-groups]
 dev = ["pytest", "ruff"]
@@ -19,4 +24,4 @@ testpaths = ["tests"]
 line-length = 100
 
 [tool.ruff.lint.isort]
-known-first-party = ["rangelib"]
+known-first-party = ["rangelib", "inat_experts", "import_ranges"]
