@@ -28,6 +28,7 @@ export function expertiseLine(expert, taxonKey) {
 export function renderBoard(experts, { table, empty }) {
   const rows = [...experts].sort((a, b) => (b.works_total || 0) - (a.works_total || 0));
   empty.hidden = rows.length > 0;
+  empty.querySelector('button').onclick = () => document.getElementById('tab-map').click();
   table.hidden = !rows.length;
   table.tBodies[0].replaceChildren(...rows.map(e => el('tr', {},
     el('td', { textContent: e.display || shownName(e.author) }),

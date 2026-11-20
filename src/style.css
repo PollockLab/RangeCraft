@@ -99,7 +99,7 @@ footer p { margin:.3rem 0; }
 @media (max-width: 600px) {
   #legend .lg-toggle { display:block; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
   #legend:not(.open) > div { display:none; }
-  #tools button, #tools label.btn, .chip, button.edit { min-height:44px; }
+  #tools button, #tools label.btn, .chip, button.edit, [role=tab], #share, .linkbtn, input { min-height:44px; }
   .info > summary { min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
   input[type=checkbox] { width:24px; height:24px; }
   #legend { left:.5rem; }
@@ -109,7 +109,7 @@ footer p { margin:.3rem 0; }
   #view-map { flex-direction:column-reverse; }
   #map { flex:none; height:55vh; }
   #panel { flex:1; border-right:0; border-top:1px solid var(--line); border-radius:12px 12px 0 0; }
-  #tools { left:.5rem; right:.5rem; max-width:none; }
+  #tools { left:.5rem; right:3.25rem; max-width:none; }
   #tools .bar { gap:2px; padding:2px; overflow-x:auto; }
   #tools button, #tools label.btn { flex:1 1 0; min-width:0; flex-direction:column; gap:0; padding:.2rem 0; font-size:10px; line-height:1.2; justify-content:center; }
   #tools .tx { white-space:nowrap; }
@@ -121,7 +121,7 @@ footer p { margin:.3rem 0; }
   h1 { font-size:1.15rem; }
   nav button { padding:.3rem .4rem; white-space:nowrap; font-size:.85rem; }
   nav { display:flex; flex:none; }
-  header #share { font-size:.7rem; padding:.2rem .35rem; line-height:1.15; min-width:0; }
+  header #share { font-size:.7rem; padding:.2rem .35rem; line-height:1.15; min-width:0; min-height:44px; }
 }
 .maplibregl-popup-content { color:#1b1f23; }
 .maplibregl-popup-content a { display:block; margin-top:.2rem; }
@@ -139,3 +139,4 @@ footer p { margin:.3rem 0; }
 #steps li.done button { color:var(--fg); }
 #steps button[aria-current=step] { color:var(--fg); font-weight:600; border-color:var(--accent); }
 @media (max-width: 600px) { #steps button { min-height:44px; } }
+input[aria-invalid=true] { outline:2px solid #c62828; outline-offset:1px; border-color:#c62828; }

@@ -9,6 +9,8 @@ class HolePolygonMode extends TerraDrawPolygonMode {
   validateFeature(f) { return this.validateModeFeature(f, () => ({ valid: true })); }
 }
 
+export const DRAFT = '#0b3d91'; // dark blue outline so the user's own drawing stands out from the basemap and community ranges
+const DRAFT_STYLE = { fillColor: DRAFT, fillOpacity: 0.2, outlineColor: DRAFT, outlineWidth: 3 };
 const EDIT = { feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true, snappable: true } } };
 
 // Flatten a GeoJSON object (FeatureCollection, Feature or geometry) into single Polygon geometries.
@@ -21,8 +23,8 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   const td = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
     modes: [
-      new HolePolygonMode({ snapping: { toCoordinate: true } }),
-      new TerraDrawFreehandMode(),
+      new HolePolygonMode({ snapping: { toCoordinate: true }, styles: DRAFT_STYLE }),
+      new TerraDrawFreehandMode({ styles: DRAFT_STYLE }),
       new TerraDrawSelectMode({ flags: { polygon: EDIT, freehand: EDIT } }),
       new TerraDrawRenderMode({ modeName: 'view', styles: {} }),
     ],

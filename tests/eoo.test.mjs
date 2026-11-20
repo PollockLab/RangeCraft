@@ -27,3 +27,12 @@ test('AOO: duplicates share a cell, distant points add 4 km2 each, empty is null
   assert.equal(aoo([[10, 10], [11, 10]]), 8);
   assert.equal(aoo([]), null);
 });
+
+test('EOO: polygons with presence code 3-6 are excluded, 1-2 kept', () => {
+  const a = { id: 'a', ...poly([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]) }, b = { id: 'b', ...poly([[5, 5], [6, 5], [6, 6], [5, 6], [5, 5]]) };
+  const full = eoo([a, b]), only = eoo([a]);
+  assert.ok(full > only * 2);
+  for (const c of [3, 4, 5, 6, '6']) assert.equal(eoo([a, b], f => (f.id === 'b' ? c : 1)), only);
+  assert.equal(eoo([a, b], f => (f.id === 'b' ? 2 : 1)), full);
+  assert.equal(eoo([a], () => 3), null);
+});

@@ -4,7 +4,7 @@ import { initSearch } from './search.js';
 import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } from './export.js';
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
-import { initDraw } from './draw.js';
+import { initDraw, DRAFT } from './draw.js';
 import { renderBoard, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
 import { buildHash, parseHash } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
@@ -35,7 +35,7 @@ const fitPad = narrow ? { top: 70, bottom: 20, left: 20, right: 20 } : 40;
 
 const setLegend = initLegend(map);
 const rangeCheck = initRangeCheck({ map, state, onChange: () => { updateLegend(); eooUi(); }, drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
-const eooUi = initEoo({ $, draw: () => draw, points: () => rangeCheck.points() });
+const eooUi = initEoo({ $, draw: () => draw, points: () => rangeCheck.points(), presence: id => iucn.presence(id) });
 const say = t => { $('msg').textContent = t; };
 const steps = initSteps({ state, draw: () => draw, $ }); steps();
 const mapReady = new Promise(res => map.once('load', res));
@@ -122,7 +122,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   state.copy = null;
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
-  $('selected').hidden = $('intro').hidden = true;
+  $('selected').hidden = $('intro').hidden = true; $('how').open = false; // collapse only, the saved rc-how preference is untouched
   lock(false);
   steps();
   $('share').hidden = false;
@@ -166,6 +166,7 @@ function updateLegend() {
     if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
     items.push(...rangeCheck.legend());
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
+    if (draw?.all().length) items.push({ label: 'Your draft', swatch: DRAFT });
     if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }
   setLegend(items);
@@ -250,7 +251,7 @@ function current(needName = false) {
   const features = draw?.all() ?? [];
   if (!features.length) { say('Draw at least one polygon first.'); return null; }
   const author = $('author').value.trim();
-  if (needName && !author) { say('Enter a display name.'); openPropose(true); $('author').focus(); return null; }
+  if (needName && !author) { say('Enter a display name.'); $('author').setAttribute('aria-invalid', 'true'); openPropose(true); $('author').focus(); return null; }
   const github = $('github').value.trim();
   if (github && !GITHUB_RE.test(github)) { say('GitHub username: letters, digits, hyphens, up to 39.'); $('github').focus(); return null; }
   const orcid = $('orcid').value.trim(), inat = $('inat').value.trim();
@@ -425,7 +426,7 @@ try {
   for (const k of ME) if (typeof me[k] === 'string') $(k).value = me[k];
   $('me').open = ME.slice(1).some(k => me[k]);
 } catch {}
-$('propose-form').addEventListener('input', () => { try { localStorage.setItem('rc-me', JSON.stringify(Object.fromEntries(ME.map(k => [k, $(k).value])))); } catch {} });
+$('propose-form').addEventListener('input', e => { if (e.target.id === 'author') e.target.removeAttribute('aria-invalid'); try { localStorage.setItem('rc-me', JSON.stringify(Object.fromEntries(ME.map(k => [k, $(k).value])))); } catch {} });
 
 // ---- tabs ----
 const tabs = [['tab-map', 'view-map'], ['tab-board', 'view-board']];

@@ -36,5 +36,5 @@ export function initIucnUi({ $, state, draw, say, writeHash }) {
       say('Downloaded IUCN-format GeoJSON. ID_NO is blank for the assessor.');
     } catch (e) { say(e.message); }
   });
-  return { select(id) { selected = id; show(); } };
+  return { select(id) { selected = id; show(); }, presence: id => perFeature.get(id)?.PRESENCE ?? defaults.PRESENCE };
 }

@@ -94,6 +94,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
       onChange();
+      sum.style.scrollMarginTop = '4.5rem'; sum.scrollIntoView({ block: 'start' }); // below the sticky step bar, clear of the sticky propose card at the bottom
     } catch (e) { if (!stale()) clear(`Range check failed: ${e.message}`); }
   }
   $('rc-targets').addEventListener('click', () => {

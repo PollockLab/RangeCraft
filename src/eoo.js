@@ -19,9 +19,10 @@ function hull(pts) { // Andrew's monotone chain
 
 const rings = f => f.geometry?.type === 'Polygon' ? [f.geometry.coordinates[0]] : f.geometry?.type === 'MultiPolygon' ? f.geometry.coordinates.map(p => p[0]) : [];
 
-// Convex-hull area in km2 over all polygon vertices; null when there is no polygon (or the hull is degenerate).
-export function eoo(features) {
-  const h = hull(project(features.flatMap(rings).flat()));
+// Convex-hull area in km2 over polygon vertices; null when there is no polygon (or the hull is degenerate).
+// IUCN: polygons with presence code 3-6 (possibly extant, possibly extinct, extinct, uncertain) are left out; presence(f) gives the code (default 1).
+export function eoo(features, presence = () => 1) {
+  const h = hull(project(features.filter(f => { const c = Number(presence(f)); return !(c >= 3 && c <= 6); }).flatMap(rings).flat()));
   if (h.length < 3) return null;
   return Math.abs(h.reduce((s, p, i) => s + p[0] * h[(i + 1) % h.length][1] - h[(i + 1) % h.length][0] * p[1], 0)) / 2;
 }
