@@ -61,6 +61,7 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 .sub { margin:0 0 .2rem 1.4rem; font-size:.8rem; color:var(--muted); display:block; }
 .sw { display:inline-block; width:.9rem; height:.7rem; border-radius:2px; flex:none; }
 .sw.dashed { height:0; border-top:2px dashed currentColor; border-radius:0; width:.9rem; background:none; }
+.sw.dotted { height:0; border-top:3px dotted #7b2cbf; border-radius:0; width:.9rem; background:none; }
 #versions { list-style:none; margin:0; padding:0; }
 #versions > li { padding:.15rem 0; }
 #versions .lyr .check { overflow:hidden; }
@@ -101,7 +102,7 @@ footer { font-size:.8rem; color:var(--muted); }
 footer p { margin:.3rem 0; }
 #legend { background:var(--bg); color:var(--fg); border-radius:6px; padding:.3rem .5rem; font-size:.8rem; box-shadow:0 0 0 2px rgba(0,0,0,.1); margin:0 0 1.5rem 10px; }
 #legend .sw { margin-right:.15rem; vertical-align:-.05rem; }
-#legend .sw.dashed { vertical-align:.2rem; width:1.6rem; }
+#legend .sw.dashed, #legend .sw.dotted { vertical-align:.2rem; width:1.6rem; }
 #legend .lg-toggle { display:none; }
 #rc-summary ul { margin:.2rem 0 0; padding-left:1.1rem; }
 @media (max-width: 600px) {

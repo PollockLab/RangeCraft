@@ -85,6 +85,14 @@
           <div class="sub" id="rc-summary" role="status"></div>
           <button id="rc-targets" type="button" class="linkbtn" hidden title="Download a CSV of up to 50 suitable grid cells with no records, best habitat first">Survey targets (CSV)</button>
           <a id="rc-blitz" class="sub" href="https://openbiodiversity.ca/" target="_blank" rel="noopener" title="Blitz the Gap 2026 on openbiodiversity.ca: a citizen-science campaign to fill these gaps">Survey them in Blitz the Gap</a>
+          <div id="inat" hidden>
+            <div class="lyr" id="inat-row" hidden>
+              <label class="check"><input type="checkbox" id="inat-toggle"><i class="sw dotted"></i> iNaturalist model range</label>
+              <button id="inat-edit" type="button" title="Add and cut your own shapes on top of the iNaturalist range. Only your shapes are saved, never the range.">Edit (saved as a patch)</button>
+              <details class="info"><summary aria-label="About this layer">ⓘ</summary><p id="inat-info"></p></details>
+            </div>
+            <p class="sub" id="inat-note"></p>
+          </div>
           <div id="official" hidden>
             <div class="lyr">
               <span class="check"><i class="sw dashed"></i> Official range</span>

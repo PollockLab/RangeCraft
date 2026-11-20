@@ -13,7 +13,7 @@ export function initLegend(map) {
     box.hidden = !items.length;
     box.replaceChildren(btn, ...items.map(({ label, swatch, dashed, palette, title }) => {
       const row = document.createElement('div');
-      row.append(...(palette ? palette.map(c => sw(c)) : [dashed ? sw('', 'sw dashed') : sw(swatch)]), ` ${label}`);
+      row.append(...(palette ? palette.map(c => sw(c)) : [dashed ? sw('', `sw ${dashed === 'dotted' ? 'dotted' : 'dashed'}`) : sw(swatch)]), ` ${label}`);
       if (title) row.title = title;
       return row;
     }));
