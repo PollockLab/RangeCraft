@@ -1,0 +1,20 @@
+[
+  {
+    "taxonKey": 10806364,
+    "voters": [
+      "Wietze"
+    ],
+    "consensus_area_km2": 3374939.5,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2427072,
+    "voters": [
+      "Wietze"
+    ],
+    "consensus_area_km2": 3986381.1,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  }
+]
