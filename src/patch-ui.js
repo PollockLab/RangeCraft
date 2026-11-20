@@ -27,21 +27,25 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
     $('official-edit').textContent = 'Edit (saved as a patch)';
   }
   // shapes: the earlier patch's shapes when editing a patch, so the new file is cumulative against the official base.
-  async function enter(slug, shapes = [], parent = null) {
+  // Returns false when the species changed while loading (nothing is entered).
+  async function enter(slug, shapes = [], parent = null, taxon = state.taxon) {
     const baseFc = await base(slug);
+    if (state.taxon !== taxon) return false;
     if (state.patch) exit();
     state.copy = null;
     draw().load({ type: 'FeatureCollection', features: [] });
     state.patch = { base: slug, baseFc, shapes, parent };
     if (!state.official?.fc) await showOfficial();
+    if (state.taxon !== taxon) return false;
     render(); sync();
     $('t-cut').disabled = false; $('t-cut').title = 'Cut area: sketch a shape to remove from the official range (saved as a cut shape)';
     $('official-edit').textContent = 'Stop patch editing';
+    return true;
   }
   $('official-edit').addEventListener('click', async () => {
     if (state.patch) { exit(); draw().load({ type: 'FeatureCollection', features: [] }); say('Patch editing stopped.'); return; }
     say('Loading the official outline...');
-    try { await enter(state.official.slug); say('Patch mode: use Add area and Cut area. Only your shapes are saved, never the outline.'); } catch (e) { say(e.message); }
+    try { if (await enter(state.official.slug)) say('Patch mode: use Add area and Cut area. Only your shapes are saved, never the outline.'); } catch (e) { say(e.message); }
   });
 
   return {
@@ -49,7 +53,8 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
     exit,
     sketch(op, geometry) { state.patch.shapes.push({ op, geometry }); render(); sync(); say(op === 'add' ? 'Area added to your patch.' : 'Area cut in your patch.'); },
     // Edit an existing patch revision: start from its shapes, with it as the parent.
-    async edit(r) { const p = await loadRange(r.file); await enter(p.properties.base, p.features.map(f => ({ op: f.properties.op, geometry: f.geometry })), r.file); },
+    async edit(r) { const t = state.taxon, p = await loadRange(r.file); return enter(p.properties.base, p.features.map(f => ({ op: f.properties.op, geometry: f.geometry })), r.file, t); },
+    enter,
     // Polygons drawn with the Polygon tool in patch mode count as adds.
     build: (features, meta) => toPatch([...state.patch.shapes, ...features.map(f => ({ op: 'add', geometry: f.geometry }))], { ...meta, base: state.patch.base, parent: state.patch.parent }),
     // Map data for a range file: a patch is shown as its applied result, anything else as is.

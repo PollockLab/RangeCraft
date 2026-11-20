@@ -2,6 +2,7 @@
 // shortcut: no self-intersection test and overlapping polygons are not unioned before the bbox
 // ratio; CI (rangelib.load_range) is the full check and fails the PR if either matters.
 export class RangeError extends Error {}
+export const SLUG = /^[a-z0-9-]{1,80}$/;
 
 const MAX_PARTS = 200, MAX_BBOX_RATIO = 50, BASES = ['expert-outline-edit', 'new', 'official-patch'];
 // Client properties we keep. Everything else (github, orcid, inat_login, identity, submitter...) is dropped.
@@ -22,6 +23,8 @@ function checkRing(ring, where) {
 export function validateRange(fc) {
   if (!fc || typeof fc !== 'object' || fc.type !== 'FeatureCollection') throw new RangeError('root must be a GeoJSON FeatureCollection');
   if (!Array.isArray(fc.features) || !fc.features.length) throw new RangeError('FeatureCollection has no features');
+  // A patch holds sparse add/cut shapes, not a range, so the bbox ratio does not apply.
+  const sparse = { ...fc.features[0]?.properties, ...fc.properties }.basis === 'official-patch';
   let parts = 0, area = 0, x0 = 181, y0 = 91, x1 = -181, y1 = -91;
   fc.features.forEach((f, i) => {
     const g = f?.geometry;
@@ -37,7 +40,7 @@ export function validateRange(fc) {
   if (!(area > 0)) throw new RangeError('geometry is empty or has zero area');
   if (parts > MAX_PARTS) throw new RangeError(`${parts} parts exceeds the limit of ${MAX_PARTS}`);
   const ratio = (x1 - x0) * (y1 - y0) / area;
-  if (ratio > MAX_BBOX_RATIO) throw new RangeError(`bbox is ${Math.round(ratio)}x the geometry area (limit ${MAX_BBOX_RATIO}x)`);
+  if (!sparse && ratio > MAX_BBOX_RATIO) throw new RangeError(`bbox is ${Math.round(ratio)}x the geometry area (limit ${MAX_BBOX_RATIO}x)`);
 }
 
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : undefined);
@@ -52,6 +55,7 @@ export function cleanProps(fc, session, today) {
   if (session.verified || !p.author) p.author = session.name;
   if (p.basis && !BASES.includes(p.basis)) throw new RangeError(`basis must be one of ${BASES.join(', ')}`);
   if (p.basis === 'expert-outline-edit' && !p.derived_from) throw new RangeError('basis expert-outline-edit requires derived_from');
+  if (p.base !== undefined && !SLUG.test(p.base)) throw new RangeError('base must be a slug: lowercase letters, digits and hyphens, at most 80 characters');
   if (p.basis === 'official-patch' && (!p.base || fc.features.some(f => !['add', 'cut'].includes(f.properties?.op)))) throw new RangeError("basis official-patch requires base and op 'add' or 'cut' on every feature");
   return { ...p, created: today, submitter: { provider: session.provider, id: session.id, ...(session.login && { login: session.login }), name: session.name, verified: !!session.verified } };
 }

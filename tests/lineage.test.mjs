@@ -23,6 +23,13 @@ test('buildGraph and log: chain oldest first, missing parent is a root, fork has
   assert.deepEqual(log(g, 'nope'), []);
 });
 
+test('a first patch is a root (no parent path); a later patch points at its file', () => {
+  const g = buildGraph([r('p1', null, { basis: 'official-patch' }), r('p2', 'p1', { basis: 'official-patch', created: '2025-02-01' })]);
+  assert.equal(g.get('p1').parent, null);
+  assert.equal(g.get('p1').range.basis, 'official-patch');
+  assert.deepEqual(log(g, 'p2').map(n => n.range.id), ['p1', 'p2']);
+});
+
 test('cycles and self-parents are guarded', () => {
   const g = buildGraph([r('a', 'b'), r('b', 'a'), r('s', 's')]);
   assert.deepEqual(log(g, 'a').map(n => n.range.id).sort(), ['a', 'b']);

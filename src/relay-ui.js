@@ -2,16 +2,19 @@
 import { RELAY_URL } from './api.js';
 import * as relay from './relay.js';
 
-export function initRelayUi({ $, say, current, openPropose, draw, mapReady }) {
-  const stashDraft = () => relay.saveDraft({ features: draw()?.all() ?? [], ...Object.fromEntries(['author', 'github', 'orcid', 'inat', 'sources'].map(k => [k, $(k).value])) });
+export function initRelayUi({ $, say, state, patch, current, openPropose, draw, mapReady }) {
+  let draft, pending; // pending: the stashed patch, entered once its species is selected
+  const load = features => { try { draw().load({ type: 'FeatureCollection', features }); } catch (e) { say(`Could not restore your drawing: ${e.message}`); } };
+  const stashDraft = () => relay.saveDraft({ features: draw()?.all() ?? [], patch: state.patch && { taxon: state.taxon.key, base: state.patch.base, shapes: state.patch.shapes, parent: state.patch.parent }, ...Object.fromEntries(['author', 'github', 'orcid', 'inat', 'sources'].map(k => [k, $(k).value])) });
   async function initRelay() {
     if (!RELAY_URL) return;
     const err = relay.takeSession();
-    const draft = relay.takeDraft();
+    draft = relay.takeDraft();
+    pending = draft?.patch;
     if (draft) {
       for (const k of ['author', 'github', 'orcid', 'inat', 'sources']) if (draft[k]) $(k).value = draft[k];
       openPropose(true);
-      mapReady.then(() => { try { draw().load({ type: 'FeatureCollection', features: draft.features }); } catch (e) { say(`Could not restore your drawing: ${e.message}`); } });
+      if (!pending) mapReady.then(() => load(draft.features));
     }
     let enabled;
     try { enabled = await relay.providers(); } catch { return; } // relay down: keep the GitHub route only
@@ -50,4 +53,12 @@ export function initRelayUi({ $, say, current, openPropose, draw, mapReady }) {
     $('relay-submit').disabled = false;
   });
   initRelay();
+  // Called once the species is selected: re-enter patch mode with the stashed shapes, then the polygons drawn on top.
+  return { async restorePatch(key) {
+    const p = pending;
+    if (!p || p.taxon !== key) return;
+    pending = null;
+    await mapReady;
+    try { if (await patch.enter(p.base, p.shapes, p.parent)) load(draft.features); } catch (e) { say(`Could not restore your patch: ${e.message}`); }
+  } };
 }

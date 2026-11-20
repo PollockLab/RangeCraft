@@ -187,11 +187,44 @@ def test_outline_edit_requires_derived_from(tmp_path):
 def test_official_patch_needs_base_and_ops(tmp_path):
     with pytest.raises(RangeError, match="official-patch"):
         load_range(_write(tmp_path, _fc(basis="official-patch", base="slug")))
-    ok = _fc(basis="official-patch", base="slug", parent="slug", message="m")
+    ok = _fc(basis="official-patch", base="slug", parent="data/ranges/123/r.geojson", message="m")
     ok["features"][0]["properties"] = {"op": "cut"}
     sub = tmp_path / "b"
     sub.mkdir()
     assert load_range(_write(sub, ok))["meta"]["base"] == "slug"
+
+
+def test_official_patch_skips_bbox_ratio_and_checks_base_slug(tmp_path):
+    specks = {"type": "MultiPolygon", "coordinates": [
+        [[[-170, -80], [-169, -80], [-169, -79], [-170, -79], [-170, -80]]],
+        [[[169, 79], [170, 79], [170, 80], [169, 80], [169, 79]]]]}
+    d = _fc(basis="official-patch", base="slug")
+    d["features"][0].update(properties={"op": "add"}, geometry=specks)
+    assert load_range(_write(tmp_path, d))["meta"]["base"] == "slug"
+    for i, bad in enumerate(("Bad Slug", "../x", "a" * 81)):
+        sub = tmp_path / f"s{i}"
+        sub.mkdir()
+        d["properties"]["base"] = bad
+        with pytest.raises(RangeError, match="slug"):
+            load_range(_write(sub, d))
+    d2 = _fc()
+    d2["features"][0]["geometry"] = specks
+    sub = tmp_path / "plain"
+    sub.mkdir()
+    with pytest.raises(RangeError, match="bbox"):
+        load_range(_write(sub, d2))
+
+
+def test_non_object_feature_is_a_range_error(tmp_path):
+    d = _fc()
+    d["features"] = [d["features"][0], 5]
+    with pytest.raises(RangeError, match="object"):
+        load_range(_write(tmp_path, d))
+    d["features"] = [None]
+    sub = tmp_path / "b"
+    sub.mkdir()
+    with pytest.raises(RangeError, match="object"):
+        load_range(_write(sub, d))
 
 
 def _write(tmp_path, doc, key="123"):

@@ -56,7 +56,9 @@ def load_range(path: Path, today: date | None = None) -> dict:
     feats = doc.get("features")
     if not isinstance(feats, list) or not feats:
         raise RangeError("FeatureCollection has no features")
-    meta = dict(feats[0].get("properties") or {}) if isinstance(feats[0], dict) else {}
+    if not all(isinstance(f, dict) for f in feats):
+        raise RangeError("every feature must be an object")
+    meta = dict(feats[0].get("properties") or {})
     meta.update(doc.get("properties") or {})
     missing = [k for k in REQUIRED if not meta.get(k)]
     if missing:
@@ -80,6 +82,8 @@ def load_range(path: Path, today: date | None = None) -> dict:
     for k in ("parent", "base", "message", "inat_login", "derived_from", "derived_from_license"):
         if meta.get(k) is not None and not isinstance(meta[k], str):
             raise RangeError(f"{k} must be a string")
+    if meta.get("base") is not None and not re.fullmatch(r"[a-z0-9-]{1,80}", meta["base"]):
+        raise RangeError("base must be a slug: lowercase letters, digits and hyphens, at most 80 characters")
     if meta.get("basis") == "expert-outline-edit" and not meta.get("derived_from"):
         raise RangeError("basis expert-outline-edit requires derived_from (the source outline)")
     if meta.get("basis") == "official-patch" and (
@@ -97,12 +101,12 @@ def load_range(path: Path, today: date | None = None) -> dict:
             raise RangeError(f"feature {i}: invalid geometry (self-intersection or bad ring)")
         geoms.append(g)
     geom = unary_union(geoms)
-    check_geometry(geom)
+    check_geometry(geom, sparse=meta.get("basis") == "official-patch")
     return {"meta": meta, "geometry": geom}
 
 
-def check_geometry(geom: BaseGeometry) -> None:
-    """Raise RangeError for out-of-range coords, too many parts, or a gamed bbox."""
+def check_geometry(geom: BaseGeometry, sparse: bool = False) -> None:
+    """Raise RangeError for out-of-range coords, too many parts, or a gamed bbox (not checked when sparse: official-patch shapes)."""
     if geom.is_empty or geom.area <= 0:
         raise RangeError("geometry is empty or has zero area")
     x0, y0, x1, y1 = geom.bounds
@@ -112,7 +116,7 @@ def check_geometry(geom: BaseGeometry) -> None:
     if n > MAX_PARTS:
         raise RangeError(f"{n} parts exceeds the limit of {MAX_PARTS}")
     ratio = (x1 - x0) * (y1 - y0) / geom.area
-    if ratio > MAX_BBOX_RATIO:
+    if not sparse and ratio > MAX_BBOX_RATIO:
         raise RangeError(f"bbox is {ratio:.0f}x the geometry area (limit {MAX_BBOX_RATIO}x)")
 
 

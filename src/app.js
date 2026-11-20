@@ -231,7 +231,7 @@ async function showVersions(fit = true) {
     const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit', title: 'Edit this range. Your version is saved as a new revision linked to this one; the original stays.' });
     cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
     edit.addEventListener('click', async () => {
-      try { await (r.basis === 'official-patch' ? patch.edit(r) : copyRange(r)); say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
+      try { if (r.basis === 'official-patch' ? await patch.edit(r) : (patch.exit(), await copyRange(r), true)) say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
       catch (e) { say(e.message); }
     });
     const check = Object.assign(document.createElement('span'), { className: 'check' });
@@ -280,7 +280,7 @@ $('propose').addEventListener('click', () => {
 
 const iucn = initIucnUi({ $, state, draw: () => draw, say, writeHash, onChange: () => eooUi() });
 
-initRelayUi({ $, say, current, openPropose, draw: () => draw, mapReady });
+const relayUi = initRelayUi({ $, say, state, patch, current, openPropose, draw: () => draw, mapReady });
 
 $('occ-toggle').addEventListener('change', e => {
   if (map.getLayer('occ')) map.setLayoutProperty('occ', 'visibility', e.target.checked ? 'visible' : 'none');
@@ -433,6 +433,7 @@ async function fromHash() {
     }
     for (const k of ['occ', 'agree']) if ($(`${k}-toggle`).checked !== s[k]) { $(`${k}-toggle`).checked = s[k]; $(`${k}-toggle`).dispatchEvent(new Event('change')); }
     await state.officialReady;
+    await relayUi.restorePatch(state.taxon.key);
     if (s.official && state.official) await showOfficial({ fit: !s.at });
     if (s.sdm && state.official) { $('sdm-toggle').checked = true; $('sdm-toggle').dispatchEvent(new Event('change')); }
     if (s.rc) { $('rc-toggle').checked = true; $('rc-toggle').dispatchEvent(new Event('change')); }

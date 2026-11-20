@@ -2,19 +2,21 @@
 // forbids republishing derivatives). Pure; the clip function (polygon-clipping) is injected.
 import { multi } from './diff.js';
 
-const ofOp = (patch, op) => multi({ features: (patch?.features ?? []).filter(f => f.properties?.op === op) });
-
-// MultiPolygon coordinates of union(base, adds) minus cuts. base is a FeatureCollection, patch a patch file.
+// MultiPolygon coordinates of the base with each shape folded in as drawn: add = union, cut = difference. base is a FeatureCollection, patch a patch file.
 export function applyPatch(base, patch, clip) {
-  const b = multi(base), adds = ofOp(patch, 'add'), cuts = ofOp(patch, 'cut');
-  const parts = [b, adds].filter(g => g.length), grown = parts.length ? clip.union(...parts) : [];
-  return cuts.length && grown.length ? clip.difference(grown, cuts) : grown;
+  return (patch?.features ?? []).reduce((acc, f) => {
+    const g = multi({ features: [f] }), op = f.properties?.op;
+    if (!g.length) return acc;
+    if (op === 'add') return acc.length ? clip.union(acc, g) : clip.union(g);
+    return op === 'cut' && acc.length ? clip.difference(acc, g) : acc;
+  }, multi(base));
 }
 
-// shapes: [{ op: 'add' | 'cut', geometry }] drawn by the user. The collection carries no base geometry, only a pointer to it.
+// shapes: [{ op: 'add' | 'cut', geometry }] drawn by the user. The collection carries no base geometry, only a pointer to it. meta.parent is the previous patch's file path, if any.
 export function toPatch(shapes, meta) {
   const props = { taxonKey: Number(meta.taxonKey) || meta.taxonKey, scientificName: meta.scientificName, author: meta.author, created: new Date().toISOString().slice(0, 10),
-    sources: meta.sources, basis: 'official-patch', base: meta.base, parent: meta.parent ?? meta.base };
+    sources: meta.sources, basis: 'official-patch', base: meta.base };
+  if (meta.parent) props.parent = meta.parent; // a real repo file path, absent for a first patch (the base slug is not a revision)
   if (meta.message) props.message = meta.message;
   for (const [k, v] of [['github', meta.github], ['orcid', meta.orcid], ['inat_login', meta.inat]]) if (v) props[k] = v;
   return { type: 'FeatureCollection', features: shapes.map(s => ({ type: 'Feature', properties: { op: s.op }, geometry: s.geometry })), properties: props };
