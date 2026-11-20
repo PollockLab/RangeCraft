@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, bin, verdict, summaryItems, summaryTip, cellArea, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, CONUS } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, bin, verdict, summaryItems, summaryTip, cellArea, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, outsideLine, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -199,4 +199,10 @@ test('recordParams builds the GBIF records filter', async () => {
   assert.equal(recordParams('all'), ''); assert.equal(recordParams(undefined), '');
   assert.equal(recordParams('since2000', 2026), '&year=2000,2026');
   assert.equal(recordParams('specimens'), '&basisOfRecord=PRESERVED_SPECIMEN');
+});
+
+test('outsideLine words the count and handles zero and one', () => {
+  assert.equal(outsideLine(3), '3 GBIF grid cells with records fall outside this range.');
+  assert.equal(outsideLine(1), '1 GBIF grid cell with records falls outside this range.');
+  assert.match(outsideLine(0), /^No GBIF grid cells/);
 });

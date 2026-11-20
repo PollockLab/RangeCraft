@@ -99,8 +99,10 @@ def main() -> int:
             "edit_date": edit_date,
         })
 
-    dupes = superseded(items)
-    evidence = {it["id"] for it in items if it["id"] not in dupes}
+    # An official-outline patch holds only add/cut shapes, not a range: listed in the index, never scored or exported.
+    patch = lambda it: it["meta"].get("basis") == "official-patch"
+    dupes = superseded([it for it in items if not patch(it)])
+    evidence = {it["id"] for it in items if it["id"] not in dupes and not patch(it)}
     prep = {}
     if not args.offline:
         # inside_all needs no window, so zero-evidence ranges are dropped before windows are built.
@@ -115,7 +117,7 @@ def main() -> int:
     for it in items:
         m = it["meta"]
         counted = it["id"] in evidence
-        reason = None if counted else ("superseded" if it["id"] in dupes else "no_evidence")
+        reason = None if counted else ("patch" if patch(it) else "superseded" if it["id"] in dupes else "no_evidence")
         score = None
         if counted and not args.offline:
             wkt, tol, simple, i_all = prep[it["id"]]
@@ -126,14 +128,14 @@ def main() -> int:
             "author": it["git_author"], "identity": it["identity"], "display": m["author"],
             "github": m.get("github"), "orcid": m.get("orcid"),
             "inat_login": m.get("inat_login"), "submitter": m.get("submitter"), "basis": m.get("basis"), "parent": m.get("parent"),
-            "derived_from": m.get("derived_from"),
+            "derived_from": m.get("derived_from"), "message": m.get("message"),
             "derived_from_license": m.get("derived_from_license"),
             "created": str(m["created"]), "edit_date": it["edit_date"], "file": it["file"],
             "counted": counted, "reason": reason, "score": score,
         }
         index.append(entry)
         # Outlines derived from non-CC-BY sources keep their score but not their geometry.
-        geom = mapping(it["geometry"]) if exportable(m) else None
+        geom = mapping(it["geometry"]) if exportable(m) and not patch(it) else None
         features.append({"type": "Feature", "geometry": geom,
                          "properties": {k: v for k, v in entry.items() if k != "score"}
                          | {"score": score}})

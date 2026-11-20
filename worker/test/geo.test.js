@@ -28,6 +28,20 @@ test('part limit and bbox ratio', () => {
   assert.throws(() => validateRange(fc({}, specks)), /bbox/);
 });
 
+test('official patches skip the bbox ratio (sparse shapes) but keep the other limits', () => {
+  const specks = { type: 'MultiPolygon', coordinates: [square(-170, -80, 1).coordinates, square(170, 80, 1).coordinates] };
+  const patch = fc({ basis: 'official-patch', base: 'slug' }, specks);
+  patch.features[0].properties = { op: 'add' };
+  validateRange(patch);
+  assert.equal(buildFile(patch, S).properties.base, 'slug');
+});
+
+test('base must be a slug', () => {
+  const p = base => { const x = fc({ basis: 'official-patch', base }); x.features[0].properties = { op: 'add' }; return x; };
+  for (const bad of ['Bad Slug', '../x', 'a/b', 'a'.repeat(81)]) assert.throws(() => buildFile(p(bad), S), /slug/, bad);
+  assert.equal(buildFile(p('a'.repeat(80)), S).properties.base.length, 80);
+});
+
 test('taxonKey must be numeric', () => {
   assert.throws(() => buildFile(fc({ taxonKey: '12a' }), S), /numeric/);
   assert.throws(() => buildFile(fc({ taxonKey: undefined }), S), /numeric/);
@@ -64,3 +78,14 @@ test('author falls back to the session name; basis rules', () => {
 });
 
 test('slug', () => { assert.equal(slug('Ann O\'Neil!'), 'ann-o-neil'); assert.equal(slug(''), 'anon'); assert.equal(slug('../x'), 'x'); });
+
+test('official patches keep base, message and per-feature op', () => {
+  const patch = fc({ basis: 'official-patch', base: 'lithobates-sylvaticus', message: 'Add Gaspé' });
+  assert.throws(() => buildFile(patch, S), /op 'add' or 'cut'/);
+  patch.features[0].properties = { op: 'cut' };
+  const out = buildFile(patch, S);
+  assert.equal(out.properties.base, 'lithobates-sylvaticus');
+  assert.equal(out.properties.message, 'Add Gaspé');
+  assert.equal(out.features[0].properties.op, 'cut');
+  assert.throws(() => buildFile(fc({ basis: 'official-patch' }), S), /requires base/);
+});

@@ -189,3 +189,5 @@ export const toGeoJSON = cells => ({
 // iNaturalist Identify page for a bin: records of the taxon that still need or have an ID, for checking misidentifications.
 export const inatIdentifyUrl = (name, c) =>
   `https://www.inaturalist.org/observations/identify?taxon_name=${encodeURIComponent(name)}&swlat=${c.s}&swlng=${c.w}&nelat=${c.n}&nelng=${c.e}&quality_grade=needs_id,research`;
+// The muted line under a range row: how many grid cells with records lie outside it.
+export const outsideLine = n => n ? `${n} GBIF grid cell${n === 1 ? '' : 's'} with records ${n === 1 ? 'falls' : 'fall'} outside this range.` : 'No GBIF grid cells with records fall outside this range.';

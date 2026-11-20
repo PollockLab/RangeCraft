@@ -8,7 +8,7 @@ Not always. When the site shows sign-in buttons (ORCID, iNaturalist, GitHub or a
 
 ## Can I dispute a range?
 
-Yes, by adding your own. Use Edit a copy on the range you disagree with, or draw from scratch, add your sources, and propose it. You cannot overwrite someone else's file: each existing file stays bound to its owner. Both ranges then stay on the map as separate voters, and the agreement map shows where they differ. To discuss the disagreement, use Copy link to this view. The link opens the same species with the same ranges, layers and map position, so a colleague sees what you see. Attach it to your pull request or an email.
+Yes, by adding your own. Use Edit on the range you disagree with, or draw from scratch, add your sources, and propose it. You cannot overwrite someone else's file: each existing file stays bound to its owner. Both ranges then stay on the map as separate voters, and the agreement map shows where they differ. To discuss the disagreement, use Copy link to this view. The link opens the same species with the same ranges, layers and map position, so a colleague sees what you see. Attach it to your pull request or an email.
 
 ## Why is my score 0, or why is there no score?
 
@@ -29,7 +29,7 @@ Not as a replacement for the Red List process. Red List maps are made by assesso
 
 ## Do exports record where a copy came from?
 
-Yes. An export records the source a copy was derived from (for example the community range or imported source you pressed Edit a copy on), alongside the display name and sources you enter.
+Yes. An export records the source a copy was derived from (for example the community range or imported source you pressed Edit on), alongside the display name and sources you enter.
 
 ## How do I read Range check honestly?
 

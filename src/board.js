@@ -1,4 +1,5 @@
 // Contributors view and per-taxon expertise, from data/experts.json (public track record).
+import { byAuthor, parentOf } from './lineage.js';
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 const num = n => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(n ?? 0));
 const ORCID = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/, INAT = /^[A-Za-z0-9_-]{3,40}$/;
@@ -25,17 +26,34 @@ export function expertiseLine(expert, taxonKey) {
   return el('div', { className: 'muted expert' }, bits.join(' · '), ' · ', ...ids(expert));
 }
 
-export function renderBoard(experts, { table, empty }) {
+export function renderBoard(experts, { table, empty, ranges = [] }) {
+  const mine = byAuthor(ranges), byFile = new Map(ranges.map(r => [r.file, r]));
   const rows = [...experts].sort((a, b) => (b.works_total || 0) - (a.works_total || 0));
   empty.hidden = rows.length > 0;
   empty.querySelector('button').onclick = () => document.getElementById('tab-map').click();
   table.hidden = !rows.length;
-  table.tBodies[0].replaceChildren(...rows.map(e => el('tr', {},
-    el('td', { textContent: e.display || shownName(e.author) }),
-    el('td', {}, ...ids(e)),
-    el('td', { textContent: e.works_total ?? '-' }),
-    el('td', { textContent: e.h_index ?? '-' }),
-    el('td', { textContent: Object.keys(e.taxa || {}).length }))));
+  table.tBodies[0].replaceChildren(...rows.flatMap(e => {
+    const revs = mine.get(String(e.author).toLowerCase()) ?? [], tl = el('tr', { hidden: true }, el('td', { colSpan: 5 }, timeline(revs, byFile)));
+    const name = el('button', { type: 'button', className: 'linkbtn', textContent: e.display || shownName(e.author), title: `${revs.length} revision${revs.length === 1 ? '' : 's'} over time` });
+    name.setAttribute('aria-expanded', false);
+    name.addEventListener('click', () => { tl.hidden = !tl.hidden; name.setAttribute('aria-expanded', !tl.hidden); });
+    return [el('tr', {},
+      el('td', {}, name),
+      el('td', {}, ...ids(e)),
+      el('td', { textContent: e.works_total ?? '-' }),
+      el('td', { textContent: e.h_index ?? '-' }),
+      el('td', { textContent: Object.keys(e.taxa || {}).length })), tl];
+  }));
+}
+
+// A contributor's revisions, oldest first: species, date, and whose range an edit builds on.
+function timeline(revs, byFile) {
+  if (!revs.length) return el('span', { className: 'muted', textContent: 'No revisions yet.' });
+  return el('ul', { className: 'timeline' }, ...revs.map(r => {
+    const p = byFile.get(parentOf(r));
+    const from = p ? shownName(p.author) : r.basis === 'official-patch' ? 'official outline' : null;
+    return el('li', { textContent: `${r.scientificName ?? r.taxonKey}, ${r.created}${r.message ? `: ${r.message}` : ''}${from ? ` (edit of ${from})` : ''}` });
+  }));
 }
 
 export const fmtScore = (s, r) => {

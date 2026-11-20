@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RANGES_DIR = ROOT / "data" / "ranges"
 EARTH_R_KM = 6371.0088
 REQUIRED = ("taxonKey", "author", "created")
-BASES = ("expert-outline-edit", "new")
+BASES = ("expert-outline-edit", "new", "official-patch")
 PERMISSIVE_LICENSES = ("CC0", "CC-BY-4.0", "OGL-Canada-2.0", "US-PD")
 MAX_PARTS = 200
 MAX_BBOX_RATIO = 50  # bbox area / geometry area; blocks sparse specks that inflate hits
@@ -56,7 +56,9 @@ def load_range(path: Path, today: date | None = None) -> dict:
     feats = doc.get("features")
     if not isinstance(feats, list) or not feats:
         raise RangeError("FeatureCollection has no features")
-    meta = dict(feats[0].get("properties") or {}) if isinstance(feats[0], dict) else {}
+    if not all(isinstance(f, dict) for f in feats):
+        raise RangeError("every feature must be an object")
+    meta = dict(feats[0].get("properties") or {})
     meta.update(doc.get("properties") or {})
     missing = [k for k in REQUIRED if not meta.get(k)]
     if missing:
@@ -77,11 +79,16 @@ def load_range(path: Path, today: date | None = None) -> dict:
         raise RangeError("submitter must be {provider, id, name, verified} from the relay")
     if meta.get("basis") is not None and meta["basis"] not in BASES:
         raise RangeError(f"basis must be one of {', '.join(BASES)}")
-    for k in ("parent", "inat_login", "derived_from", "derived_from_license"):
+    for k in ("parent", "base", "message", "inat_login", "derived_from", "derived_from_license"):
         if meta.get(k) is not None and not isinstance(meta[k], str):
             raise RangeError(f"{k} must be a string")
+    if meta.get("base") is not None and not re.fullmatch(r"[a-z0-9-]{1,80}", meta["base"]):
+        raise RangeError("base must be a slug: lowercase letters, digits and hyphens, at most 80 characters")
     if meta.get("basis") == "expert-outline-edit" and not meta.get("derived_from"):
         raise RangeError("basis expert-outline-edit requires derived_from (the source outline)")
+    if meta.get("basis") == "official-patch" and (
+            not meta.get("base") or not all((f.get("properties") or {}).get("op") in ("add", "cut") for f in feats)):
+        raise RangeError("official-patch requires base and an op (add or cut) on every feature")
     geoms = []
     for i, f in enumerate(feats):
         try:
@@ -94,12 +101,12 @@ def load_range(path: Path, today: date | None = None) -> dict:
             raise RangeError(f"feature {i}: invalid geometry (self-intersection or bad ring)")
         geoms.append(g)
     geom = unary_union(geoms)
-    check_geometry(geom)
+    check_geometry(geom, sparse=meta.get("basis") == "official-patch")
     return {"meta": meta, "geometry": geom}
 
 
-def check_geometry(geom: BaseGeometry) -> None:
-    """Raise RangeError for out-of-range coords, too many parts, or a gamed bbox."""
+def check_geometry(geom: BaseGeometry, sparse: bool = False) -> None:
+    """Raise RangeError for out-of-range coords, too many parts, or a gamed bbox (not checked when sparse: official-patch shapes)."""
     if geom.is_empty or geom.area <= 0:
         raise RangeError("geometry is empty or has zero area")
     x0, y0, x1, y1 = geom.bounds
@@ -109,7 +116,7 @@ def check_geometry(geom: BaseGeometry) -> None:
     if n > MAX_PARTS:
         raise RangeError(f"{n} parts exceeds the limit of {MAX_PARTS}")
     ratio = (x1 - x0) * (y1 - y0) / geom.area
-    if ratio > MAX_BBOX_RATIO:
+    if not sparse and ratio > MAX_BBOX_RATIO:
         raise RangeError(f"bbox is {ratio:.0f}x the geometry area (limit {MAX_BBOX_RATIO}x)")
 
 

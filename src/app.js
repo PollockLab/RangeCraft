@@ -1,20 +1,24 @@
 import { speciesName, occurrenceTiles, loadIndex, loadExperts, loadRange, REPO, RELAY_URL } from './api.js';
-import * as relay from './relay.js';
 import { initSearch } from './search.js';
 import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } from './export.js';
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
-import { initDraw, DRAFT } from './draw.js';
+import { initDraw, polygonsOf, DRAFT } from './draw.js';
 import { renderBoard, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
 import { buildHash, parseHash } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
 import { initIucnUi } from './iucn-ui.js';
 import { initRangeCheck } from './rangecheck-ui.js';
+import { outsideLine } from './rangecheck.js';
 import { initReshape } from './reshape-ui.js';
 import { initEoo } from './eoo-ui.js';
 import { initCopy } from './copy.js';
+import { initHistory } from './history-ui.js';
 import { initSteps } from './steps.js';
+import { initSaved } from './saved.js';
+import { initRelayUi } from './relay-ui.js';
+import { initPatch } from './patch-ui.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -54,19 +58,22 @@ const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Done (or t
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
   const m = draw?.mode();
-  $('hint').textContent = (touch ? touchHint(m) : HINTS[m]) ?? '';
+  $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '');
   $('hint').dataset.idle = !HINTS[m];
   $('draw-actions').hidden = !touch || !HINTS[m] || m === 'select';
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); steps(); };
+const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
+const lineage = initHistory({ map, state, say, edit: r => editRange(r) });
+const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial() });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, reshape.apply, () => reshape.reset(), drawn); syncTools(); });
-$('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
+$('open-propose').addEventListener('click', () => { if ($('propose-form').hidden) $('author').removeAttribute('aria-invalid'); openPropose($('propose-form').hidden); });
+$('author').addEventListener('blur', e => { if (!e.target.value.trim()) e.target.setAttribute('aria-invalid', 'true'); }); // error only after the user leaves it empty or submits
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
 syncTools();
 for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => setTool(m));
@@ -85,9 +92,11 @@ async function loadFile(file) {
   try {
     if (!draw) await mapReady;
     state.copy = null;
-    const n = draw.load(JSON.parse(await file.text()));
-    if (!n) throw new Error('No polygons found in that file.');
-    say(`Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
+    const gj = JSON.parse(await file.text()), was = patch.active();
+    if (!polygonsOf(gj).length) throw new Error('No polygons found in that file.'); // before leaving patch mode, so a bad file keeps the unsaved patch
+    if (was) patch.exit();
+    const n = draw.load(gj);
+    say(`${was ? 'Patch editing stopped: loaded a file. ' : ''}Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
   } catch (e) { say(`Could not load ${file.name}: ${e.message}`); }
 }
 $('load-file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
@@ -120,11 +129,12 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   say('');
   state.taxon = { key: String(key), name };
   state.copy = null;
+  lineage.clear(); patch.exit();
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('selected').hidden = $('intro').hidden = true; if (!$('how').dataset.seen) { $('how').dataset.seen = '1'; $('how').open = false; } // collapse on the first pick only; rc-how is untouched
   lock(false);
-  steps();
+  steps.close(); steps();
   $('share').hidden = false;
   $('q').value = name;
   await mapReady;
@@ -166,6 +176,7 @@ function updateLegend() {
     if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
     items.push(...rangeCheck.legend());
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
+    if (patch.active()) items.push({ label: 'Your additions', swatch: '#2a9d3f' }, { label: 'Your cuts', swatch: '#d62828' });
     if (draw?.all().length) items.push({ label: 'Your draft', swatch: DRAFT });
     if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }
@@ -173,17 +184,19 @@ function updateLegend() {
 }
 $('panel').addEventListener('change', updateLegend);
 
+const rangeOn = new Map(); // range id -> latest checkbox state, so a quick off/on while loading ends where the user left it
 async function toggleRange(r, color, on) {
-  const id = `range-${r.id}`;
-  if (!on) { map.setLayoutProperty(`${id}-fill`, 'visibility', 'none'); map.setLayoutProperty(`${id}-line`, 'visibility', 'none'); return; }
-  if (!map.getSource(id)) {
-    const data = await loadRange(r.file);
+  const id = `range-${r.id}`, taxon = state.taxon;
+  rangeOn.set(id, on);
+  if (on && !map.getSource(id)) {
+    const data = await patch.display(await loadRange(r.file));
+    if (state.taxon !== taxon) return; // species changed while loading
+    if (map.getSource(id)) return; // a concurrent toggle added it while we awaited
     map.addSource(id, { type: 'geojson', data });
     map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': 0.3 } }, 'occ');
     map.addLayer({ id: `${id}-line`, type: 'line', source: id, paint: { 'line-color': color, 'line-width': 2 } }, 'occ');
   }
-  map.setLayoutProperty(`${id}-fill`, 'visibility', 'visible');
-  map.setLayoutProperty(`${id}-line`, 'visibility', 'visible');
+  for (const l of [`${id}-fill`, `${id}-line`]) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', rangeOn.get(id) ? 'visible' : 'none');
 }
 
 async function showVersions(fit = true) {
@@ -222,19 +235,18 @@ async function showVersions(fit = true) {
     const sc = document.createElement('div');
     sc.className = 'muted';
     sc.textContent = fmtScore(r.score, r);
-    const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit a copy', title: 'Disagree? Copy this range into the editor, then drag vertices or add and cut areas' });
+    const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit', title: 'Edit this range. Your version is saved as a new revision linked to this one; the original stays.' });
     cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
-    edit.addEventListener('click', async () => {
-      try { await copyRange(r); say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
-      catch (e) { say(e.message); }
-    });
+    edit.addEventListener('click', () => editRange(r));
     const check = Object.assign(document.createElement('span'), { className: 'check' });
     check.append(cb, lab);
-    row.append(check, edit, tgl);
+    row.append(check, edit, lineage.button(r), tgl);
     more.append(sc);
     const ex = expertiseLine(findExpert(state.experts, r.author), state.taxon.key);
     if (ex) more.append(ex);
     li.append(row);
+    const rec = recordsLine(r, cb);
+    if (rec) li.append(rec);
     loadRange(r.file).then(fc => {
       if (fc.properties?.coverage) li.append(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
     }).catch(() => {}).finally(() => li.append(more));
@@ -244,12 +256,38 @@ async function showVersions(fit = true) {
   if (fit) fitRanges(rs);
 }
 
+// Load a range (or a past revision of one) into the editor; the new file's parent is that range.
+async function editRange(r) {
+  try { if (r.basis === 'official-patch' ? await patch.edit(r) : (patch.exit(), await copyRange(r), true)) say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
+  catch (e) { say(e.message); }
+}
+// Muted line under a range row: how many GBIF grid cells with records fall outside it. Fetches only when clicked.
+function recordsLine(r, cb) {
+  if (r.basis === 'official-patch') return null; // a patch file holds only its shapes, not the whole range
+  const line = Object.assign(document.createElement('div'), { className: 'muted' }), go = Object.assign(document.createElement('button'), { type: 'button', className: 'linkbtn', textContent: 'Check records', title: 'Count GBIF grid cells with records that fall outside this range' });
+  const show = Object.assign(document.createElement('button'), { type: 'button', className: 'linkbtn', textContent: 'Show', title: 'Run the range check against this range only' });
+  show.addEventListener('click', () => { for (const x of document.querySelectorAll('#versions input')) { x.checked = x === cb; x.dispatchEvent(new Event('change', { bubbles: true })); } if (!$('rc-toggle').checked) $('rc-toggle').click(); });
+  go.addEventListener('click', async () => {
+    go.disabled = true; line.replaceChildren('Counting GBIF records...');
+    try {
+      const n = await rangeCheck.outsideCount(await loadRange(r.file));
+      if (n == null) return; // species changed meanwhile
+      // The main check prefers a draft or the official outline, so "Show" would not match this count then.
+      const alone = !draw?.all().length && !state.official?.fc;
+      line.replaceChildren(outsideLine(n), ...(n ? alone ? [' ', show] : [' Clear your draft and hide the official outline to compare against this range.'] : []));
+    }
+    catch (e) { line.replaceChildren(`Could not check records: ${e.message}`); go.disabled = false; line.append(' ', go); }
+  });
+  line.append(go);
+  return line;
+}
+
 // ---- export / propose ----
 // needName: proposing needs a display name, plain exports do not (COMPILER stays blank).
 function current(needName = false) {
   if (!state.taxon) { say('Select a species first.'); return null; }
   const features = draw?.all() ?? [];
-  if (!features.length) { say('Draw at least one polygon first.'); return null; }
+  if (!features.length && !state.patch?.shapes.length) { say('Draw at least one polygon first.'); return null; }
   const author = $('author').value.trim();
   if (needName && !author) { say('Enter a display name.'); $('author').setAttribute('aria-invalid', 'true'); openPropose(true); $('author').focus(); return null; }
   const github = $('github').value.trim();
@@ -257,7 +295,10 @@ function current(needName = false) {
   const orcid = $('orcid').value.trim(), inat = $('inat').value.trim();
   if (orcid && !ORCID_RE.test(orcid)) { say('ORCID must look like 0000-0002-1825-0097.'); $('orcid').focus(); return null; }
   if (inat && !INAT_RE.test(inat)) { say('iNaturalist username: letters, digits, _ or -.'); $('inat').focus(); return null; }
-  return buildCollection(features, { taxonKey: state.taxon.key, scientificName: state.taxon.name, author, github, orcid, inat, sources: $('sources').value.trim(), derived: state.copy?.derived });
+  const message = $('change-msg').value.trim();
+  if (needName && (state.copy || state.patch) && !message) { say('Say what changed and why.'); $('change-msg').focus(); return null; }
+  const meta = { message, taxonKey: state.taxon.key, scientificName: state.taxon.name, author, github, orcid, inat, sources: $('sources').value.trim(), derived: state.copy?.derived };
+  return state.patch ? patch.build(features, meta) : buildCollection(features, meta);
 }
 $('export').addEventListener('click', () => { const fc = current(); if (fc) { download(fc); say('Downloaded.'); } });
 $('propose').addEventListener('click', () => {
@@ -271,54 +312,7 @@ $('propose').addEventListener('click', () => {
 
 const iucn = initIucnUi({ $, state, draw: () => draw, say, writeHash, onChange: () => eooUi() });
 
-// ---- relay: submit without a GitHub account ----
-const stashDraft = () => relay.saveDraft({ features: draw?.all() ?? [], ...Object.fromEntries(['author', 'github', 'orcid', 'inat', 'sources'].map(k => [k, $(k).value])) });
-async function initRelay() {
-  if (!RELAY_URL) return;
-  const err = relay.takeSession();
-  const draft = relay.takeDraft();
-  if (draft) {
-    for (const k of ['author', 'github', 'orcid', 'inat', 'sources']) if (draft[k]) $(k).value = draft[k];
-    openPropose(true);
-    mapReady.then(() => { try { draw.load({ type: 'FeatureCollection', features: draft.features }); } catch (e) { say(`Could not restore your drawing: ${e.message}`); } });
-  }
-  let enabled;
-  try { enabled = await relay.providers(); } catch { return; } // relay down: keep the GitHub route only
-  if (!enabled.length) return;
-  $('relay').hidden = false;
-  $('propose').textContent = 'Have a GitHub account? Propose via GitHub';
-  $('propose').classList.remove('primary');
-  const s = relay.session();
-  $('relay-who').textContent = s ? `Signed in as ${s.name} (${s.provider}${s.verified ? ', verified' : ', unverified'}).` : 'Sign in to submit without a GitHub account.';
-  $('relay-submit').hidden = !s;
-  $('relay-buttons').replaceChildren(...enabled.filter(p => p !== 'email').map(p => {
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: `${s ? 'Switch to' : 'Sign in with'} ${relay.LABELS[p]}` });
-    b.addEventListener('click', () => { stashDraft(); location.href = relay.signInUrl(p); });
-    return b;
-  }));
-  $('relay-email').hidden = !enabled.includes('email');
-  if (err) say(err === 'denied' ? 'Sign-in was cancelled.' : err === 'foreign_token' ? 'Ignored a sign-in link that this browser did not start.' : 'Sign-in failed. Try again or use another provider.');
-}
-$('relay-mail-send').addEventListener('click', async () => {
-  try { stashDraft(); await relay.emailStart($('relay-mail').value.trim(), $('author').value.trim()); say('Check your inbox, the link is valid for 15 minutes. Your drawing is restored when you open it.'); }
-  catch (e) { say(e.message); }
-});
-$('relay-submit').addEventListener('click', async () => {
-  const s = relay.session();
-  if (!s) { say('Your sign-in expired. Sign in again.'); $('relay-submit').hidden = true; return; }
-  const fc = current(true);
-  if (!fc) return;
-  if (!fc.properties.sources) { say('Add sources and evidence before submitting.'); $('sources').focus(); return; }
-  $('relay-submit').disabled = true;
-  say('Submitting...');
-  try {
-    const url = await relay.submit(fc, fc.properties.sources, s.token);
-    $('relay-link').replaceChildren('Submitted: ', Object.assign(document.createElement('a'), { href: url, textContent: url, target: '_blank', rel: 'noopener' }));
-    say('Pull request opened. Reviewers will take it from here.');
-  } catch (e) { say(e.message); }
-  $('relay-submit').disabled = false;
-});
-initRelay();
+const relayUi = initRelayUi({ $, say, state, patch, current, openPropose, draw: () => draw, mapReady });
 
 $('occ-toggle').addEventListener('change', e => {
   if (map.getLayer('occ')) map.setLayoutProperty('occ', 'visibility', e.target.checked ? 'visible' : 'none');
@@ -328,7 +322,8 @@ $('occ-toggle').addEventListener('change', e => {
 // ---- contributors ----
 async function showBoard() {
   state.experts ??= await loadExperts();
-  renderBoard(state.experts, { table: $('board'), empty: $('board-empty') });
+  state.index ??= await loadIndex();
+  renderBoard(state.experts, { table: $('board'), empty: $('board-empty'), ranges: state.index });
 }
 
 // ---- official outline + SDM ----
@@ -417,16 +412,7 @@ map.on('click', 'agree-fill', e => {
   new maplibregl.Popup().setLngLat(e.lngLat).setText(kOfN(e.features[0].properties, noun)).addTo(map);
 });
 
-// ---- how it works, saved details ----
-if (localStorage.getItem('rc-how') === 'off') $('how').hidden = true;
-$('how-close').addEventListener('click', () => { $('how').hidden = true; localStorage.setItem('rc-how', 'off'); });
-const ME = ['author', 'github', 'orcid', 'inat'];
-try {
-  const me = JSON.parse(localStorage.getItem('rc-me') || '{}');
-  for (const k of ME) if (typeof me[k] === 'string') $(k).value = me[k];
-  $('me').open = ME.slice(1).some(k => me[k]);
-} catch {}
-$('propose-form').addEventListener('input', e => { if (e.target.id === 'author') e.target.removeAttribute('aria-invalid'); try { localStorage.setItem('rc-me', JSON.stringify(Object.fromEntries(ME.map(k => [k, $(k).value])))); } catch {} });
+initSaved($);
 
 // ---- tabs ----
 const tabs = [['tab-map', 'view-map'], ['tab-board', 'view-board']];
@@ -479,6 +465,7 @@ async function fromHash() {
     }
     for (const k of ['occ', 'agree']) if ($(`${k}-toggle`).checked !== s[k]) { $(`${k}-toggle`).checked = s[k]; $(`${k}-toggle`).dispatchEvent(new Event('change')); }
     await state.officialReady;
+    await relayUi.restorePatch(state.taxon.key);
     if (s.official && state.official) await showOfficial({ fit: !s.at });
     if (s.sdm && state.official) { $('sdm-toggle').checked = true; $('sdm-toggle').dispatchEvent(new Event('change')); }
     if (s.rc) { $('rc-toggle').checked = true; $('rc-toggle').dispatchEvent(new Event('change')); }

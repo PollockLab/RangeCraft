@@ -22,8 +22,13 @@ export const occurrenceTiles = key =>
   `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${encodeURIComponent(key)}&srs=EPSG:3857&style=classic.poly&bin=hex`;
 
 // GBIF square-binned density tile (EPSG:4326, 4096 extent) as [{ x, y, props: { total } }].
-export async function densityTile(key, { z, x, y }, signal, filter = 'all') {
+const tiles = new Map(); // url -> promise, so the range check and per-range counts share fetches
+export function densityTile(key, { z, x, y }, signal, filter = 'all') {
   const url = `https://api.gbif.org/v2/map/occurrence/density/${z}/${x}/${y}.mvt?taxonKey=${encodeURIComponent(key)}&srs=EPSG:4326&bin=square&squareSize=${SQUARE}${recordParams(filter)}`;
+  if (!tiles.has(url)) tiles.set(url, fetchTile(url, signal).catch(e => { tiles.delete(url); throw e; }));
+  return tiles.get(url);
+}
+async function fetchTile(url, signal) {
   let r = await fetch(url, { signal });
   for (let wait = 500; r.status === 429 && wait <= 4000; wait *= 2) { await new Promise(ok => setTimeout(ok, wait)); r = await fetch(url, { signal }); } // rate limited: back off
   if (!r.ok) throw new Error(`GBIF ${r.status}`);

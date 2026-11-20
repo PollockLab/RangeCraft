@@ -99,6 +99,8 @@ def load_voters(taxon_dir: Path) -> dict:
         except RangeError as e:
             print(f"skip {p.name}: {e}", file=sys.stderr)
             continue
+        if r["meta"].get("basis") == "official-patch":
+            continue
         src = imported_source(r["meta"])
         who = f"source:{src}" if src else credit_key(p)
         key = (str(r["meta"]["created"]), p.name)

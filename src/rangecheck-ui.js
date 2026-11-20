@@ -50,6 +50,29 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     const covered = fcs.length > 0 && fcs.every(fc => fc.properties?.coverage);
     return { fc: { type: 'FeatureCollection', features: fcs.flatMap(fc => fc.features ?? []) }, ref: [...new Set(boxes.map(b => b.dataset.author))].join(' + '), coverage: covered ? rc.CONUS : null };
   }
+  // GBIF occurrence bins over a box: { size, tiles, counts }. Stops early when stale() turns true.
+  async function binCounts(box, taxon, mode, stale, progress) {
+    const { size, tiles } = rc.pickZoom(box), counts = new Map();
+    let next = 0, done = 0;
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      while (next < tiles.length && !stale()) {
+        const t = tiles[next++];
+        rc.addTile(counts, t, await densityTile(taxon.key, t, undefined, mode));
+        if (!stale()) progress(Math.round((100 * ++done) / tiles.length));
+      }
+    }));
+    return { size, tiles, counts };
+  }
+  // Grid cells with records whose centre falls outside fc, without touching the map layer.
+  async function outsideCount(fc) {
+    const box = rc.bbox(fc), taxon = state.taxon;
+    if (!box) return 0;
+    const stale = () => state.taxon !== taxon;
+    const { size, counts } = await binCounts(box, taxon, filter(), stale, () => {});
+    if (stale()) return null;
+    // Same coverage rule as the full check: records beyond a CONUS-only range's coverage are unmapped, not outside.
+    return rc.classify(counts, fc, size, { coverage: fc.properties?.coverage ? rc.CONUS : null }).cells.filter(c => c.status === 'outside').length;
+  }
   async function runRangeCheck(scroll = false) {
     const run = ++rcRun, taxon = state.taxon, mode = filter();
     const stale = () => run !== rcRun || state.taxon !== taxon;
@@ -57,16 +80,8 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       const { fc, ref, coverage } = await reference();
       const box = rc.bbox(fc);
       if (!box) { clear('Show a community range or load the official outline first.'); return; }
-      const { size, tiles } = rc.pickZoom(box), counts = new Map();
-      let next = 0, done = 0;
       $('rc-summary').textContent = 'Counting GBIF records...';
-      await Promise.all(Array.from({ length: 4 }, async () => {
-        while (next < tiles.length && !stale()) {
-          const t = tiles[next++];
-          rc.addTile(counts, t, await densityTile(taxon.key, t, undefined, mode));
-          if (!stale()) $('rc-summary').textContent = `Counting GBIF records... ${Math.round((100 * ++done) / tiles.length)}%`;
-        }
-      }));
+      const { size, tiles, counts } = await binCounts(box, taxon, mode, stale, pct => { $('rc-summary').textContent = `Counting GBIF records... ${pct}%`; });
       if (stale()) return;
       let suit = null, why = 'none';
       if (state.official) {
@@ -144,5 +159,5 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   });
   const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range grid cells with records reach.`;
   const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => threshold == null ? k !== 'unmapped' || hasUnmapped : present.has(k)).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k], ...(threshold != null && k !== 'unmapped' && { title: tip() }) })) : [];
-  return { clear, legend, refresh, points: () => pts };
+  return { clear, legend, refresh, outsideCount, points: () => pts };
 }
