@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RangeCraft: community species range maps</title>
+<meta name="description" content="Draw species range maps, get them reviewed, and earn credit from GBIF evidence.">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.css">
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<header>
+  <h1>RangeCraft</h1>
+  <nav role="tablist" aria-label="Views">
+    <button role="tab" id="tab-map" aria-controls="view-map" aria-selected="true">Map</button>
+    <button role="tab" id="tab-board" aria-controls="view-board" aria-selected="false" tabindex="-1">Leaderboard</button>
+  </nav>
+</header>
+
+<main>
+  <section id="view-map" role="tabpanel" aria-labelledby="tab-map">
+    <aside id="panel">
+      <div class="field">
+        <label for="q">Species</label>
+        <input id="q" type="search" autocomplete="off" placeholder="e.g. Danaus plexippus" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
+        <ul id="results" role="listbox" hidden></ul>
+      </div>
+      <p id="selected" class="muted" aria-live="polite">No species selected.</p>
+
+      <label class="check"><input type="checkbox" id="occ-toggle" checked> Show GBIF occurrences</label>
+
+      <h2>Community ranges</h2>
+      <ul id="versions" aria-live="polite"><li class="muted">Select a species.</li></ul>
+
+      <h2>Your range</h2>
+      <p class="muted">Use the polygon tool on the map, then export or propose it.</p>
+      <div class="field"><label for="author">Author (GitHub username)</label><input id="author" autocomplete="username"></div>
+      <div class="field"><label for="sources">Sources and evidence</label><textarea id="sources" rows="3" placeholder="Citations, expert knowledge, links"></textarea></div>
+      <div class="actions">
+        <button id="export" type="button">Export GeoJSON</button>
+        <button id="propose" type="button" class="primary">Propose edit</button>
+      </div>
+      <p id="msg" role="status" class="muted"></p>
+    </aside>
+    <div id="map" aria-label="Map" tabindex="-1"></div>
+  </section>
+
+  <section id="view-board" role="tabpanel" aria-labelledby="tab-board" hidden>
+    <table id="board">
+      <caption>Contributors ranked by credit</caption>
+      <thead><tr><th scope="col">#</th><th scope="col">Author</th><th scope="col">Ranges</th><th scope="col">Records inside (after edit)</th><th scope="col">Credit</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="board-empty" class="muted" hidden>No leaderboard yet.</p>
+  </section>
+</main>
+
+<footer>
+  <details>
+    <summary>How credit works</summary>
+    <p>Credit = GBIF records observed <em>after</em> your edit that fall inside your range, minus a penalty for area. Drawing the whole world earns nothing.</p>
+  </details>
+  <p>Code: <a href="LICENSE">MIT</a>. Data: <a href="DATA_LICENSE.md">CC BY 4.0</a>. Occurrences from <a href="https://www.gbif.org">GBIF</a>. Basemap by <a href="https://openfreemap.org">OpenFreeMap</a> and OpenStreetMap contributors.</p>
+</footer>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.js"></script>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
