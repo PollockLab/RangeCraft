@@ -128,19 +128,34 @@ export const tilesBox = (tiles, size) => tiles.reduce((b, t) => {
   return [Math.min(b[0], w - size), Math.min(b[1], n - th - size), Math.max(b[2], w + tw + size), Math.max(b[3], n + size)];
 }, [180, 90, -180, -90]);
 
-// ref names what was compared ("official outline", "your draft"); covered names the coverage area when the check was restricted to it.
-export const summaryLine = (r, ref, covered) => {
-  const lead = ref ? `vs ${ref}: ` : '', note = covered ? ` Compared within the source's coverage (${covered}); bins outside it are not mapped by this source.` : '';
-  return (r.total
-    ? `${lead}${Math.round(r.outsidePct)}% of records fall outside this range; ${Math.round(r.gapPct)}% of the range has no records.`
-    : `${lead}No GBIF records with coordinates found around this range.`) + note;
+// "over 1,000" style bin for large counts so ID-check numbers do not read as alarms; exact below 10.
+export const bin = n => {
+  if (n < 10) return String(n);
+  const k = 10 ** Math.floor(Math.log10(n)), b = n >= 5 * k ? 5 * k : k; // steps 10, 50, 100, 500, 1,000, ...
+  return `over ${b.toLocaleString('en-US')}`;
 };
 
-// Habitat-checked extras for the summary; '' when nothing was habitat-checked.
-export const habitatLine = r => r.threshold == null ? '' : [
-  r.survey && `${r.survey} bin${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records.`,
-  r.lowGaps && `${r.lowGaps} in-range bin${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`,
-  r.lowRecords && `${r.lowRecords} record${r.lowRecords === 1 ? '' : 's'} in low-suitability habitat outside the range ${r.lowRecords === 1 ? 'is' : 'are'} worth an ID check.`].filter(Boolean).join(' ');
+// One bold verdict from the share of records outside the range; ref names what was compared ("official outline", "your draft").
+export const verdict = (r, ref) => {
+  const vs = ref ? ` (vs ${ref})` : '';
+  if (!r.total) return `No GBIF records with coordinates found around this range${vs}.`;
+  return (r.outsidePct < 10 ? 'Range fits the records well' : r.outsidePct <= 30 ? 'Range may be too small in places' : 'Many records fall outside this range') + vs;
+};
+
+// Short list under the verdict, legend wording.
+export const summaryItems = r => !r.total ? [] : [
+  `${Math.round(r.outsidePct)}% of records fall outside this range`,
+  `${Math.round(r.gapPct)}% of the range has no records yet`,
+  r.threshold != null && r.survey && `${r.survey} bin${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records: worth surveying`,
+  r.threshold != null && r.lowRecords && `${bin(r.lowRecords)} record${r.lowRecords === 1 ? '' : 's'} outside the range in low-suitability habitat: worth an ID check`,
+].filter(Boolean);
+
+// Tooltip with the details: threshold, coverage, low-suitability bins.
+export const summaryTip = (r, covered, why) => [
+  sdmNote(r, why),
+  r.threshold != null && r.lowGaps && `${r.lowGaps} in-range bin${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`,
+  covered && `Compared within the source's coverage (${covered}); bins outside it are not mapped by this source.`,
+].filter(Boolean).join(' ');
 
 const csvCell = v => /[",\n]/.test(v = String(v)) ? `"${v.replace(/"/g, '""')}"` : v;
 // CSV of up to `limit` survey (frontier) and suitable-gap bins, best habitat score first. Header only when there are none.
