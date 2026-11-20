@@ -65,9 +65,10 @@ async function toggleRange(r, color, on) {
 
 const fmtScore = (s, r) => {
   if (!s) return 'not yet scored';
-  const bits = [`precision ${(s.precision * 100).toFixed(0)}%, ${s.prospective_inside}/${s.prospective_total} new records inside`];
+  const bits = [];
+  if (s.window_all) bits.push(`${Math.round((s.inside_all / s.window_all) * 100)}% of all nearby GBIF records inside`);
+  bits.push(s.window_post ? `${s.inside_post}/${s.window_post} records since edit inside` : 'no records since edit yet');
   if (s.skill != null) bits.push(`skill ${Number(s.skill).toFixed(2)} (new records inside vs expected by chance)`);
-  if (s.out_post != null) bits.push(`${s.out_post} new records outside`);
   if (r.edit_date) bits.push(`edited ${r.edit_date}`);
   return bits.join(', ');
 };
@@ -128,7 +129,7 @@ $('propose').addEventListener('click', () => {
   if (!fc.properties.sources) { say('Add sources and evidence before proposing.'); $('sources').focus(); return; }
   const url = proposeUrl(fc);
   if (url) { window.open(url, '_blank', 'noopener'); say('Opened GitHub. Commit the new file to open a pull request.'); }
-  else { download(fc); say(`Range too large for a link. Downloaded; upload it at github.com/PollockLab/RangeCraft under data/ranges/${fc.properties.taxonKey}/ via "Add file > Upload files", then open a pull request.`); }
+  else { download(fc); say(`Range too large for a link. Downloaded; upload it at github.com/PollockLab/rangecraft under data/ranges/${fc.properties.taxonKey}/ via "Add file > Upload files", then open a pull request.`); }
 });
 
 $('occ-toggle').addEventListener('change', e => {

@@ -2,7 +2,7 @@
 
 Collaborative species range maps. Experts draw ranges, edits are reviewed like pull requests, and contributors earn credit from evidence: GBIF occurrences recorded after their edit that fall inside their range, minus a penalty for area.
 
-Live site: https://pollocklab.github.io/RangeCraft/
+Live site: https://pollocklab.github.io/rangecraft/
 
 ## Contribute
 

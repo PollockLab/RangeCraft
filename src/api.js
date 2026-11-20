@@ -1,5 +1,5 @@
 // Data access: GBIF suggest/tiles and the repo's static JSON files.
-export const REPO = 'PollockLab/RangeCraft';
+export const REPO = 'PollockLab/rangecraft';
 
 export async function suggest(q, signal) {
   const r = await fetch(`https://api.gbif.org/v1/species/suggest?q=${encodeURIComponent(q)}&rank=SPECIES&limit=8`, { signal });
