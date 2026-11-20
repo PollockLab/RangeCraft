@@ -45,6 +45,11 @@ test('client identity claims are stripped and submitter comes from the session',
   }
 });
 
+test('login is carried in the submitter for display only', () => {
+  const out = buildFile(fc(), { provider: 'github', id: '4242', login: 'ann', name: 'A', verified: true });
+  assert.deepEqual(out.properties.submitter, { provider: 'github', id: '4242', login: 'ann', name: 'A', verified: true });
+});
+
 test('author falls back to the session name; basis rules', () => {
   assert.equal(buildFile(fc({ author: undefined }), S).properties.author, 'Josiah');
   assert.throws(() => buildFile(fc({ basis: 'copied' }), S), /basis/);

@@ -51,7 +51,7 @@ export function cleanProps(fc, session, today) {
   p.author ||= session.name;
   if (p.basis && !BASES.includes(p.basis)) throw new RangeError(`basis must be one of ${BASES.join(', ')}`);
   if (p.basis === 'expert-outline-edit' && !p.derived_from) throw new RangeError('basis expert-outline-edit requires derived_from');
-  return { ...p, created: today, submitter: { provider: session.provider, id: session.id, name: session.name, verified: !!session.verified } };
+  return { ...p, created: today, submitter: { provider: session.provider, id: session.id, ...(session.login && { login: session.login }), name: session.name, verified: !!session.verified } };
 }
 
 // Validate and rebuild: only geometry and whitelisted properties survive, submitter comes from the session.

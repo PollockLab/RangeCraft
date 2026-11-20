@@ -28,8 +28,9 @@ export const PROVIDERS = {
       const t = await tokenExchange('https://www.inaturalist.org/oauth/token', 'INAT', env, args);
       const { api_token: jwt } = await json(await fetch('https://www.inaturalist.org/users/api_token', { headers: { Authorization: `Bearer ${t.access_token}`, Accept: 'application/json' } }));
       const u = (await json(await fetch('https://api.inaturalist.org/v1/users/me', { headers: { Authorization: jwt, Accept: 'application/json' } }))).results?.[0];
-      if (!u?.login) throw new Error('no iNaturalist user');
-      return { provider: 'inat', id: u.login, name: u.name || u.login, verified: true };
+      if (!u?.login || !Number.isInteger(u.id)) throw new Error('no iNaturalist user');
+      // The numeric id is permanent; logins can be renamed and reused, so they are display/lookup only.
+      return { provider: 'inat', id: String(u.id), login: u.login, name: u.name || u.login, verified: true };
     },
   },
   github: {
@@ -38,8 +39,8 @@ export const PROVIDERS = {
     async identity(env, args) {
       const t = await tokenExchange('https://github.com/login/oauth/access_token', 'GITHUB', env, args);
       const u = await json(await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${t.access_token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'rangecraft-relay' } }));
-      if (!u.login) throw new Error('no GitHub user');
-      return { provider: 'github', id: u.login, name: u.name || u.login, verified: true };
+      if (!u.login || !Number.isInteger(u.id)) throw new Error('no GitHub user');
+      return { provider: 'github', id: String(u.id), login: u.login, name: u.name || u.login, verified: true };
     },
   },
 };

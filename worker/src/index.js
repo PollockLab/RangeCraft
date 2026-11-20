@@ -20,12 +20,12 @@ async function hit(kv, key, max, ttl) {
   return true;
 }
 
-const session = (env, id) => sign(env.HMAC_KEY, 'session', { provider: id.provider, id: id.id, name: String(id.name).slice(0, 100), verified: !!id.verified }, SESSION_TTL);
+const session = (env, id) => sign(env.HMAC_KEY, 'session', { provider: id.provider, id: id.id, ...(id.login && { login: String(id.login).slice(0, 100) }), name: String(id.name).slice(0, 100), verified: !!id.verified }, SESSION_TTL);
 const readCookie = (req, k) => (req.headers.get('Cookie') || '').split(/;\s*/).map(c => c.split('=')).find(([n]) => n === k)?.[1];
 
 export async function handle(req, env) {
   const url = new URL(req.url), origin = req.headers.get('Origin');
-  const cors = originAllowed(env, origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : { Vary: 'Origin' };
+  const cors = originAllowed(env, origin) ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', 'Vary': 'Origin' } : { Vary: 'Origin' };
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600' } });
   const out = async p => { const r = await p; for (const [k, v] of Object.entries(cors)) r.headers.set(k, v); return r; };
   const enabled = enabledProviders(env);
@@ -36,10 +36,11 @@ export async function handle(req, env) {
   if (parts[0] === 'auth' && parts.length === 3 && parts[1] === 'email' && parts[2] === 'start' && req.method === 'POST') {
     return out(emailStart(req, env, enabled, origin));
   }
+  if (req.method === 'POST' && url.pathname === '/auth/email/callback' && enabled.includes('email')) return emailCallback(req, env, (await req.formData().catch(() => new FormData())).get('t'));
   if (parts[0] === 'auth' && parts.length === 3 && req.method === 'GET') {
     const [, p, step] = parts;
     if (!enabled.includes(p)) return reply(404, 'provider disabled');
-    if (p === 'email' && step === 'callback') return emailCallback(url, env);
+    if (p === 'email' && step === 'callback') return emailCallback(req, env, url.searchParams.get('t'));
     if (p !== 'email' && step === 'start') return oauthStart(url, req, env, p);
     if (p !== 'email' && step === 'callback') return oauthCallback(url, req, env, p);
   }
@@ -84,16 +85,27 @@ async function emailStart(req, env, enabled, origin) {
   const nonce = randomId();
   await env.KV.put(`ml:${nonce}`, '1', { expirationTtl: 900 });
   // The email itself never leaves the token; the public id is a hash prefix.
-  const t = await sign(env.HMAC_KEY, 'ml', { nonce, id: eh.slice(0, 16), name: String(b.name || '').trim().slice(0, 100) || 'Email contributor', return: ret.toString() }, 900);
+  const t = await sign(env.HMAC_KEY, 'ml', { nonce, em: email, id: eh.slice(0, 16), name: String(b.name || '').trim().slice(0, 100) || 'Email contributor', return: ret.toString() }, 900);
   try { await sendMagicLink(env, email, `${new URL(req.url).origin}/auth/email/callback?t=${t}`); } catch { return reply(502, { error: 'could not send email' }); }
-  return reply(200, { ok: true });
+  // Binds the link to this browser. Cross-site fetch needs SameSite=None; where the browser blocks
+  // that cookie, the callback falls back to a confirmation page.
+  return reply(200, { ok: true }, { 'Set-Cookie': `rc_ml=${nonce}; Max-Age=900; Path=/auth; HttpOnly; Secure; SameSite=None` });
 }
 
-async function emailCallback(url, env) {
-  const c = await verify(env.HMAC_KEY, 'ml', url.searchParams.get('t'));
+const esc = v => String(v).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const page = body => new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>RangeCraft sign-in</title><body style="font:16px system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem">${body}`, {
+  headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Cache-Control': 'no-store' } });
+
+// Without the cookie set by emailStart (link opened in another browser) the token is not handed out
+// on a bare GET: the visitor must confirm, so a link sent to a victim cannot silently sign them in as the attacker.
+async function emailCallback(req, env, token) {
+  const c = await verify(env.HMAC_KEY, 'ml', token);
   if (!c || !(await env.KV.get(`ml:${c.nonce}`))) return reply(400, 'link expired or already used');
+  if (req.method === 'GET' && readCookie(req, 'rc_ml') !== c.nonce) {
+    return page(`<h1>Sign in to RangeCraft?</h1><p>This link signs you in as the email account <b>${esc(c.em)}</b> (unverified). Continue only if you asked for it.</p><form method="post" action="/auth/email/callback"><input type="hidden" name="t" value="${esc(token)}"><button type="submit">Sign in as ${esc(c.em)}</button></form>`);
+  }
   await env.KV.delete(`ml:${c.nonce}`);
-  return redirect(withParams(c.return, { token: await session(env, { provider: 'email', id: c.id, name: c.name, verified: false }) }));
+  return new Response(null, { status: req.method === 'POST' ? 303 : 302, headers: { Location: withParams(c.return, { token: await session(env, { provider: 'email', id: c.id, name: c.name, verified: false }) }), 'Set-Cookie': 'rc_ml=; Max-Age=0; Path=/auth; HttpOnly; Secure; SameSite=None' } });
 }
 
 async function submit(req, env, origin) {

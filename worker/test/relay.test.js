@@ -54,14 +54,14 @@ test('github flow: PKCE, state, cookie binding, session in the fragment', async 
   const state = loc.searchParams.get('state');
 
   routes['POST https://github.com/login/oauth/access_token'] = init => { assert.ok(new URLSearchParams(init.body).get('code_verifier')); return J({ access_token: 'at' }); };
-  routes['GET https://api.github.com/user'] = init => { assert.equal(init.headers.Authorization, 'Bearer at'); return J({ login: 'ann', name: null }); };
+  routes['GET https://api.github.com/user'] = init => { assert.equal(init.headers.Authorization, 'Bearer at'); return J({ id: 4242, login: 'ann', name: null }); };
   const cb = `/auth/github/callback?code=c&state=${state}`;
   assert.equal((await get(cb)).status, 400); // no cookie: login CSRF
   const ok = await get(cb, { Cookie: cookie(s) });
   assert.equal(ok.status, 302);
   assert.equal(fragment(ok).get('taxon'), '5');
   const sess = await verify(env.HMAC_KEY, 'session', fragment(ok).get('token'));
-  assert.deepEqual({ ...sess, exp: 0, typ: 0 }, { provider: 'github', id: 'ann', name: 'ann', verified: true, exp: 0, typ: 0 });
+  assert.deepEqual({ ...sess, exp: 0, typ: 0 }, { provider: 'github', id: '4242', login: 'ann', name: 'ann', verified: true, exp: 0, typ: 0 });
   assert.ok(sess.exp - Date.now() / 1000 <= 7200);
 });
 
@@ -101,21 +101,24 @@ test('inat: token, api_token, users/me', async () => {
   routes['GET https://www.inaturalist.org/users/api_token'] = init => { assert.equal(init.headers.Authorization, 'Bearer at'); return J({ api_token: 'jwt' }); };
   routes['GET https://api.inaturalist.org/v1/users/me'] = init => { assert.equal(init.headers.Authorization, 'jwt'); return J({ results: [{ id: 9, login: 'bird_nerd', name: '' }] }); };
   const sess = await verify(env.HMAC_KEY, 'session', fragment(await get(`/auth/inat/callback?code=c&state=${state}`, { Cookie: cookie(s) })).get('token'));
-  assert.deepEqual([sess.provider, sess.id, sess.name], ['inat', 'bird_nerd', 'bird_nerd']);
+  assert.deepEqual([sess.provider, sess.id, sess.login, sess.name], ['inat', '9', 'bird_nerd', 'bird_nerd']);
 });
 
 test('email magic link: unverified identity, one-time use, rate limit', async () => {
   let mail;
   routes['POST https://api.resend.com/emails'] = init => { mail = JSON.parse(init.body); return J({ id: 'm' }); };
-  assert.equal((await post('/auth/email/start', { email: 'Ann@Example.org', return: APP + '/' })).status, 200);
+  const start = await post('/auth/email/start', { email: 'Ann@Example.org', return: APP + '/' });
+  assert.equal(start.status, 200);
+  assert.match(start.headers.get('Set-Cookie'), /HttpOnly; Secure; SameSite=None/);
+  assert.equal(start.headers.get('Access-Control-Allow-Credentials'), 'true');
   assert.deepEqual(mail.to, ['ann@example.org']);
   const link = new URL(mail.text.match(/https:\/\/\S+/)[0]);
-  const ok = await get(link.pathname + link.search);
+  const ok = await get(link.pathname + link.search, { Cookie: cookie(start) });
   const sess = await verify(env.HMAC_KEY, 'session', fragment(ok).get('token'));
   assert.equal(sess.provider, 'email'); assert.equal(sess.verified, false);
   assert.match(sess.id, /^[0-9a-f]{16}$/);
   assert.ok(!JSON.stringify(sess).includes('ann@'));
-  assert.equal((await get(link.pathname + link.search)).status, 400); // consumed
+  assert.equal((await get(link.pathname + link.search, { Cookie: cookie(start) })).status, 400); // consumed
   assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/' })).status, 200);
   assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/' })).status, 200);
   assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/' })).status, 429);
@@ -126,7 +129,44 @@ test('email magic link: unverified identity, one-time use, rate limit', async ()
 test('expired magic link is rejected', async () => {
   const t = await sign(env.HMAC_KEY, 'ml', { nonce: 'n', id: 'x', name: 'n', return: APP + '/' }, 60, Date.now() - 120_000);
   await env.KV.put('ml:n', '1');
-  assert.equal((await get(`/auth/email/callback?t=${t}`)).status, 400);
+  assert.equal((await get(`/auth/email/callback?t=${t}`, { Cookie: 'rc_ml=n' })).status, 400);
+});
+
+test('email login CSRF: no cookie means a confirmation page, not a token', async () => {
+  let mail;
+  routes['POST https://api.resend.com/emails'] = init => { mail = JSON.parse(init.body); return J({ id: 'm' }); };
+  const start = await post('/auth/email/start', { email: 'victim@example.org', return: APP + '/' });
+  const link = new URL(mail.text.match(/https:\/\/\S+/)[0]);
+  const other = await get(link.pathname + link.search); // different browser: no cookie
+  assert.equal(other.status, 200);
+  assert.equal(other.headers.get('Location'), null);
+  const html = await other.text();
+  assert.ok(html.includes('victim@example.org') && html.includes('method="post"'));
+  assert.ok(await env.KV.get([...env.KV.m.keys()].find(k => k.startsWith('ml:')))); // GET did not consume it
+  const wrong = await get(link.pathname + link.search, { Cookie: 'rc_ml=other' });
+  assert.equal(wrong.status, 200); // wrong cookie is treated as missing
+  const t = link.searchParams.get('t');
+  const post_ = await handle(new Request('https://relay.example/auth/email/callback', { method: 'POST', body: new URLSearchParams({ t }) }), env);
+  assert.equal(post_.status, 303);
+  assert.ok(await verify(env.HMAC_KEY, 'session', fragment(post_).get('token')));
+  const again = await handle(new Request('https://relay.example/auth/email/callback', { method: 'POST', body: new URLSearchParams({ t }) }), env);
+  assert.equal(again.status, 400);
+  assert.ok(start.headers.get('Set-Cookie'));
+});
+
+test('github and inat sessions key on the numeric id, not the login', async () => {
+  routes['POST https://github.com/login/oauth/access_token'] = () => J({ access_token: 'at' });
+  const states = async () => { const s = await get('/auth/github/start?return=' + encodeURIComponent(APP + '/')); return [new URL(s.headers.get('Location')).searchParams.get('state'), cookie(s)]; };
+  const ids = [];
+  for (const [id, login] of [[1, 'ann'], [2, 'ann']]) { // the login was renamed away and reused
+    routes['GET https://api.github.com/user'] = () => J({ id, login, name: 'A' });
+    const [state, ck] = await states();
+    ids.push((await verify(env.HMAC_KEY, 'session', fragment(await get(`/auth/github/callback?code=c&state=${state}`, { Cookie: ck })).get('token'))).id);
+  }
+  assert.deepEqual(ids, ['1', '2']);
+  routes['GET https://api.github.com/user'] = () => J({ login: 'ann' }); // no numeric id: refuse
+  const [state, ck] = await states();
+  assert.equal(fragment(await get(`/auth/github/callback?code=c&state=${state}`, { Cookie: ck })).get('error'), 'signin_failed');
 });
 
 test('app JWT is RS256 with iss and a short expiry', async () => {
