@@ -19,6 +19,7 @@ import { initSteps } from './steps.js';
 import { initSaved } from './saved.js';
 import { initRelayUi } from './relay-ui.js';
 import { initPatch } from './patch-ui.js';
+import { initUndoUi } from './undo-ui.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -48,23 +49,24 @@ const mapReady = new Promise(res => map.once('load', res));
 let draw;
 const TOOLS = { polygon: 't-polygon', freehand: 't-freehand', add: 't-add', cut: 't-cut', select: 't-select' };
 const HINTS = {
-  polygon: 'Click to add points, click the first point to finish. Esc cancels.',
+  polygon: 'Click to add points, then click the first point or Finish. Esc cancels.',
   freehand: 'Click to start, move to draw, click again to finish. Esc cancels.',
   add: 'Draw around the area to add (click to start, click again to finish). Esc cancels.',
   cut: 'Draw around the area to cut away (click to start, click again to finish). Esc cancels.',
   select: 'Click a shape to select it, then drag its points or the shape. Delete removes it.',
 };
-const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Done (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
+const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Finish (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
   const m = draw?.mode();
   $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '');
   $('hint').dataset.idle = !HINTS[m];
-  $('draw-actions').hidden = !touch || !HINTS[m] || m === 'select';
+  $('draw-actions').hidden = !HINTS[m] || m === 'select';
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); };
+const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); undoUi(); };
+const undoUi = initUndoUi({ $, draw: () => draw, patch: { active: () => !!state.patch }, say });
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 const lineage = initHistory({ map, state, say, edit: r => editRange(r), view: (k, d) => patch.view(k, d) });
@@ -82,7 +84,7 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && draw.mode() !== 'select') setTool('static');
   else if ((e.key === 'Delete' || e.key === 'Backspace') && draw.removeSelected()) e.preventDefault();
 });
-$('draw-done').addEventListener('click', () => draw?.finish());
+$('draw-done').addEventListener('click', () => { if (draw?.finish() === false) say('Place at least 3 points first, then press Finish.'); });
 $('draw-cancel').addEventListener('click', () => setTool('static'));
 $('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
 
@@ -129,7 +131,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   say('');
   state.taxon = { key: String(key), name };
   state.copy = null;
-  lineage.clear(); patch.exit();
+  lineage.clear(); patch.exit(); draw?.resetHistory(); undoUi();
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('selected').hidden = $('intro').hidden = true; if (!$('how').dataset.seen) { $('how').dataset.seen = '1'; $('how').open = false; } // collapse on the first pick only; rc-how is untouched

@@ -76,14 +76,16 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 #versions .more button { min-height:0; padding:.1rem .5rem; font-size:.8rem; }
 /* floating draw toolbar, on the map (icon over a tiny label on mobile) */
 #tools { position:absolute; top:.5rem; left:calc(var(--pw) + .5rem); z-index:3; max-width:calc(100% - var(--pw) - 4rem); }
+#tools { pointer-events:none; } #tools > * { pointer-events:auto; } /* the empty box beside the hint must not swallow map clicks */
 #tools .bar { display:flex; gap:.25rem; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:.25rem; box-shadow:0 1px 4px rgba(0,0,0,.2); }
 #tools button, #tools label.btn { min-height:2rem; display:inline-flex; align-items:center; gap:.3rem; padding:.2rem .5rem; font-size:.85rem; font-weight:400; border:1px solid var(--line); border-radius:6px; cursor:pointer; background:var(--bg); }
 #tools [hidden] { display:none; }
 #tools button:disabled { opacity:.5; cursor:default; }
 #tools button[aria-pressed=true] { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
 #hint { margin:.3rem 0 0; padding:.2rem .5rem; background:var(--panel); border:1px solid var(--line); border-radius:6px; font-size:.8rem; color:var(--muted); width:fit-content; max-width:22rem; }
-#draw-actions { display:flex; gap:.3rem; margin-top:.3rem; }
+#draw-actions { display:flex; gap:.3rem; margin-top:.3rem; width:fit-content; } /* not full width: the empty part would swallow map clicks */
 #draw-actions button { min-height:2.4rem; min-width:5rem; box-shadow:0 1px 4px rgba(0,0,0,.2); }
+#draw-actions .primary { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); } /* #tools button would otherwise paint it white on white */
 header #share .short { display:none; }
 #hint[data-idle=true], #hint:empty { display:none; }
 /* propose card: sticky footer of the panel */
@@ -103,7 +105,7 @@ footer p { margin:.3rem 0; }
 #legend .lg-toggle { display:none; }
 #rc-summary ul { margin:.2rem 0 0; padding-left:1.1rem; }
 @media (max-width: 600px) {
-  #legend .lg-toggle { display:block; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
+  #legend .lg-toggle { display:block; min-width:44px; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
   #legend:not(.open) > div { display:none; }
   #legend { max-height:22vh; overflow-y:auto; } /* map is 55vh: keep the open legend within 40% of it */
   #legend > div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -114,6 +116,10 @@ footer p { margin:.3rem 0; }
   input[type=checkbox] { width:24px; height:24px; }
   #legend { left:.5rem; }
 }
+@media (max-width: 700px) and (pointer: coarse) { /* the bar is full, so Undo/Redo stack in the free column at its right (no zoom control on touch) */
+  #tools #h-undo, #tools #h-redo { position:absolute; right:-3rem; width:44px; height:44px; min-height:44px; padding:0; flex-direction:column; justify-content:center; }
+  #tools #h-redo { top:48px; }
+}
 @media (max-width: 700px) {
   :root { --pw:100%; }
   #view-map { flex-direction:column-reverse; }
@@ -123,7 +129,7 @@ footer p { margin:.3rem 0; }
   #tools .bar { gap:2px; padding:2px; overflow-x:auto; }
   #tools button, #tools label.btn { flex:1 1 0; min-width:0; flex-direction:column; gap:0; padding:.2rem 0; font-size:10px; line-height:1.2; justify-content:center; }
   #tools .tx { white-space:nowrap; }
-  #legend { max-width:calc(100% - 4rem); }
+  #legend { max-width:calc(100vw - 4rem); } /* not %: the control is shrink-to-fit, so a percentage collapsed the closed pill to its padding */
   header #share .full { display:none; }
   header #share .short { display:inline; }
   table { font-size:.85rem; }

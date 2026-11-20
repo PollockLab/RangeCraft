@@ -28,11 +28,13 @@
         <button aria-label="Cut area" id="t-cut" type="button" aria-pressed="false" disabled title="Copy a range first (Edit a copy) or draw one"><span aria-hidden="true">✂</span><span class="tx">Cut area</span></button>
         <button aria-label="Edit" id="t-select" type="button" aria-pressed="false" title="Edit: click a shape to select it, then drag its points"><span aria-hidden="true">✥</span><span class="tx">Edit</span></button>
         <button aria-label="Delete selected" id="t-delete" type="button" disabled title="Select a shape with Edit first"><span aria-hidden="true">🗑</span><span class="tx">Delete</span></button>
+        <button aria-label="Undo" id="h-undo" type="button" disabled title="Undo (Ctrl+Z)"><span aria-hidden="true">↶</span><span class="tx">Undo</span></button>
+        <button aria-label="Redo" id="h-redo" type="button" disabled title="Redo (Ctrl+Shift+Z)"><span aria-hidden="true">↷</span><span class="tx">Redo</span></button>
         <label class="btn" title="Load a GeoJSON file into the editor (or drop it on the map), for example one edited in RustGIS"><span aria-hidden="true">📂</span><span class="tx">Load file</span><input id="load-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden></label>
         <button aria-label="Undo" id="t-undo" type="button" hidden title="Undo the last Add area or Cut area"><span aria-hidden="true">↶</span><span class="tx">Undo</span></button>
       </div>
       <p id="hint" role="status"></p>
-      <div id="draw-actions" hidden><button id="draw-done" type="button" class="primary">Done</button><button id="draw-cancel" type="button">Cancel</button></div>
+      <div id="draw-actions" hidden><button id="draw-done" type="button" class="primary">Finish</button><button id="draw-cancel" type="button">Cancel</button></div>
     </div>
     <aside id="panel">
       <ol id="steps" aria-label="Steps"><li><button type="button"><b>1</b> Pick species</button></li><li><button type="button"><b>2</b> Draw</button></li><li><button type="button"><b>3</b> Propose</button></li></ol>
