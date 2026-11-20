@@ -1,4 +1,5 @@
 import json
+import re
 
 import review
 from shapely.geometry import box, shape
@@ -19,3 +20,9 @@ def test_patch_applies_add_then_cut():
              {"geometry": box(0, 0, 0.5, 1).__geo_interface__, "properties": {"op": "cut"}}]
     rng = {"meta": {"basis": "official-patch"}, "features": feats, "geometry": None}
     assert review.effective(rng, box(0, 0, 1, 1)).equals(box(0.5, 0, 2, 1))
+
+
+def test_plain_neutralises_markdown():
+    out = review.plain("x\n\n## [click](http://e.vil) <img> @org/team `c`")
+    assert "\n" not in out
+    assert re.search(r"(?<!\\)[`\[\]()<>#@]", out) is None  # every control character escaped

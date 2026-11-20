@@ -10,6 +10,7 @@ Reads data only, never runs PR code: `review.py <base-ref> <head-ref> [out.md]`.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -128,6 +129,12 @@ def map_block(new: BaseGeometry, old: BaseGeometry) -> list[str]:
     return ["", "```geojson", text, "```", *note]
 
 
+def plain(value, limit: int = 200) -> str:
+    """PR-supplied text as one line with markdown, HTML and mention characters escaped."""
+    text = " ".join(str(value or "").split())[:limit]
+    return re.sub(r"([\\`*_{}\[\]()<>#+!|~@:-])", r"\\\1", text)
+
+
 def fmt(km2: float) -> str:
     return f"{km2:,.0f}"
 
@@ -141,16 +148,16 @@ def section(path: str, head: str, base: str) -> str:
         return f"### `{name}`\n\nNot reviewable: {e}\n"
     rng["features"] = doc["features"]
     meta = rng["meta"]
-    who = (meta.get("submitter") or {}).get("name") or meta.get("author")
+    who = plain(meta.get("author"))  # submitter is not shown: validate.py, not this comment, vouches for it
     lines = [
-        f"### {meta.get('scientificName') or meta['taxonKey']} by {who}",
+        f"### {plain(meta.get('scientificName') or meta['taxonKey'])} by {who}",
         "",
         f"`{name}` · basis `{meta.get('basis') or 'unset'}`",
     ]
     if meta.get("message"):
-        lines += ["", f"> {meta['message']}"]
+        lines += ["", f"> {plain(meta['message'])}"]
     if meta.get("sources"):
-        lines += ["", f"**Sources:** {meta['sources']}"]
+        lines += ["", f"**Sources:** {plain(meta['sources'], 600)}"]
     ref = reference(path, rng, base)
     if ref is None:
         new = rng["geometry"]
@@ -169,7 +176,7 @@ def section(path: str, head: str, base: str) -> str:
     pct = (lambda v: f"{100 * v / a_old:+.1f}%") if a_old else (lambda v: "")
     lines += [
         "",
-        f"Compared with **{ref_rng['meta'].get('author')}** (`{ref_path.removeprefix('data/ranges/')}`, {why}).",
+        f"Compared with **{plain(ref_rng['meta'].get('author'))}** (`{ref_path.removeprefix('data/ranges/')}`, {why}).",
         "",
         "| | km² | vs reference |",
         "|---|---:|---:|",
