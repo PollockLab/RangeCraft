@@ -14,6 +14,7 @@ from rangelib import (
     exportable,
     git_origin,
     identity_from_commit,
+    is_relay_email,
     load_range,
     skill,
     superseded,
@@ -212,6 +213,8 @@ def test_valid_loads(tmp_path):
     ({"created": "not-a-date"}, "ISO"),
     ({"created": "2999-01-01"}, "future"),
     ({"taxonKey": 999}, "directory"),
+    ({"submitter": {"provider": "orcid", "id": "x"}}, "submitter"),
+    ({"submitter": {"provider": "email", "id": "x", "name": "n", "verified": True}}, "submitter"),
 ])
 def test_bad_metadata(tmp_path, over, msg):
     with pytest.raises(RangeError, match=msg):
@@ -276,3 +279,45 @@ def test_wkt_limited_drops_small_parts_when_tolerance_is_not_enough():
     wkt, _, g = wkt_limited(isles, limit=1500)
     assert len(wkt) < 1500 and g.is_valid and not g.is_empty
     assert len(getattr(g, "geoms", [g])) < 300
+
+
+RELAY = "55+rangecraft-relay[bot]@users.noreply.github.com"
+
+
+def _relay_file(tmp_path, sub, email=RELAY, name="rangecraft-relay[bot]"):
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+    f = tmp_path / "r.geojson"
+    f.write_text(json.dumps({"properties": {"submitter": sub}}))
+    subprocess.run(["git", "add", "r.geojson"], cwd=tmp_path, check=True)
+    _commit(tmp_path, email, name, "add")
+    return f
+
+
+def test_is_relay_email():
+    assert is_relay_email(RELAY)
+    assert is_relay_email("rangecraft-relay[bot]@users.noreply.github.com")
+    assert not is_relay_email("rangecraft-relay[bot]@evil.io")
+    assert not is_relay_email("x+rangecraft-relay[bot]@users.noreply.github.com.evil.io")
+    assert not is_relay_email("1+other[bot]@users.noreply.github.com")
+
+
+def test_git_origin_relay_credits_submitter(tmp_path):
+    sub = {"provider": "orcid", "id": "0000-0002-1825-0097", "name": "J", "verified": True}
+    assert git_origin(_relay_file(tmp_path, sub))[:2] == ("orcid:0000-0002-1825-0097", "orcid")
+
+
+def test_git_origin_relay_unverified_email(tmp_path):
+    sub = {"provider": "email", "id": "ab12", "name": "E", "verified": False}
+    assert git_origin(_relay_file(tmp_path, sub))[:2] == ("email:ab12", "unverified")
+
+
+def test_git_origin_submitter_ignored_unless_relay_added_it(tmp_path):
+    sub = {"provider": "orcid", "id": "0000-0002-1825-0097", "name": "J", "verified": True}
+    # a human with the bot's display name but a normal email cannot claim an identity
+    f = _relay_file(tmp_path, sub, email="evil@example.com", name="rangecraft-relay[bot]")
+    assert git_origin(f)[:2] == ("unverified:rangecraft-relay[bot]", "unverified")
+
+
+def test_git_origin_relay_with_malformed_submitter_falls_back(tmp_path):
+    bad = {"provider": "email", "id": "ab12", "name": "E", "verified": True}  # email cannot be verified
+    assert git_origin(_relay_file(tmp_path, bad))[1] == "unverified"

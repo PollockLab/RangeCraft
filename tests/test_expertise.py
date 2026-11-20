@@ -78,3 +78,38 @@ def test_unverified_identity_never_verified(monkeypatch):
     assert not ex.expert_entry("Alice-Smith", [r], {}, offline=False)["verified"]
     r["identity"] = "github"
     assert ex.expert_entry("Alice-Smith", [r], {}, offline=False)["verified"]
+
+
+def _relay_entry(monkeypatch, sub, identity, extra=None):
+    seen = []
+
+    monkeypatch.setattr(ex, "get_json", lambda url, params=None: seen.append(url))  # -> None
+    r = {"display": "J", "taxonKey": 5, "scientificName": "Hyla x", "identity": identity,
+         "submitter": sub, "orcid": "0000-0002-1694-233X", "inat_login": "claimed", **(extra or {})}
+    return ex.expert_entry(f"{sub['provider']}:{sub['id']}", [r], {}, offline=False), seen
+
+
+def test_relay_orcid_submitter_used_directly(monkeypatch):
+    sub = {"provider": "orcid", "id": "0000-0002-1825-0097", "name": "J", "verified": True}
+    e, seen = _relay_entry(monkeypatch, sub, "orcid")
+    assert (e["orcid"], e["inat_login"], e["verified"]) == (sub["id"], None, True)
+    assert not any("researcher-urls" in u or "users/" in u for u in seen)  # no github-link check
+    assert any("orcid:0000-0002-1825-0097" in u for u in seen)
+
+
+def test_relay_inat_submitter_used_directly(monkeypatch):
+    sub = {"provider": "inat", "id": "bird_nerd", "name": "B", "verified": True}
+    e, _ = _relay_entry(monkeypatch, sub, "inat")
+    assert (e["orcid"], e["inat_login"], e["verified"]) == (None, "bird_nerd", True)
+
+
+def test_submitter_ignored_without_provider_identity(monkeypatch):
+    sub = {"provider": "orcid", "id": "0000-0002-1825-0097", "name": "J", "verified": True}
+    e, _ = _relay_entry(monkeypatch, sub, "unverified")  # e.g. a forged file added by a human
+    assert (e["orcid"], e["inat_login"], e["verified"]) == ("0000-0002-1694-233X", "claimed", False)
+
+
+def test_relay_orcid_offline_still_verified():
+    sub = {"provider": "orcid", "id": "0000-0002-1825-0097", "name": "J", "verified": True}
+    r = {"display": "J", "taxonKey": 5, "identity": "orcid", "submitter": sub}
+    assert ex.expert_entry("orcid:x", [r], {}, offline=True)["verified"] is True

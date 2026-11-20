@@ -4,6 +4,8 @@ If env PR_AUTHOR is set (CI: the PR opener's GitHub login), a range file changed
 a `github` property other than the PR author is an error (all files if the diff cannot be computed).
 `github` is optional only when a maintainer (write access) opens the PR for an expert without GitHub.
 Existing files stay bound to the `github` owner recorded on the base branch.
+`submitter` (the identity the relay signed in) is accepted only when PR_AUTHOR is the relay bot, and
+an existing file's submitter never changes. The relay bot counts as a trusted opener.
 """
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ import os
 import subprocess
 import sys
 
-from rangelib import RANGES_DIR, ROOT, RangeError, load_range
+from rangelib import RANGES_DIR, RELAY_BOT, ROOT, RangeError, load_range
 
 
 def author_mismatch(meta: dict, pr_author: str, base_meta: dict | None = None,
@@ -29,6 +31,33 @@ def author_mismatch(meta: dict, pr_author: str, base_meta: dict | None = None,
             return f"github {owner!r} differs from PR author {pr_author!r}"
         return None
     return None if trusted else "github is required unless a maintainer opens the PR"
+
+
+def submitter_error(found: list, pr_author: str, base: dict | None = None) -> str | None:
+    """found: every `submitter` value in the file (collection and features). base: its base-branch
+    properties, None for a new file. Only the relay bot may add one; an existing one is frozen."""
+    old = (base or {}).get("submitter")
+    is_relay = pr_author.casefold() == RELAY_BOT.casefold()
+    if len({json.dumps(f, sort_keys=True) for f in found}) > 1:
+        return "submitter differs between collection and features"
+    new = found[0] if found else None
+    if new != old and old is not None:
+        return "submitter cannot change"
+    if new is None:
+        return "relay files need a submitter" if is_relay and base is None else None
+    if new != old and not (is_relay and base is None):
+        return f"submitter may only be added by {RELAY_BOT} on a new file"
+    return None
+
+
+def found_submitters(path) -> list:
+    """All `submitter` values in a range file, so a feature-level copy cannot slip past."""
+    try:
+        doc = json.loads(path.read_text())
+        holders = [doc.get("properties")] + [f.get("properties") for f in doc["features"]]
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        return []
+    return [h["submitter"] for h in holders if isinstance(h, dict) and h.get("submitter") is not None]
 
 
 def base_meta(rel: str) -> dict | None:
@@ -59,6 +88,7 @@ def main() -> int:
     files = sorted(RANGES_DIR.glob("*/*.geojson"))
     pr_author = os.environ.get("PR_AUTHOR", "").strip()
     trusted = os.environ.get("PR_AUTHOR_ASSOCIATION", "") in {"OWNER", "MEMBER", "COLLABORATOR"}
+    is_relay = pr_author.casefold() == RELAY_BOT.casefold()
     changed = changed_files() if pr_author else None
     errors = []
     for f in files:
@@ -69,7 +99,9 @@ def main() -> int:
             errors.append(f"{rel}: {e}")
             continue
         check = changed is None or rel.as_posix() in changed
-        msg = author_mismatch(meta, pr_author, base_meta(rel.as_posix()), trusted) if check else None
+        base = base_meta(rel.as_posix())
+        msg = (author_mismatch(meta, pr_author, base, trusted or is_relay)
+               or submitter_error(found_submitters(f), pr_author, base)) if check and pr_author else None
         if msg:
             errors.append(f"{rel}: {msg}")
     for e in errors:
