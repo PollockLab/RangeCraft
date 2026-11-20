@@ -14,7 +14,7 @@ const code = (k, v) => {
   return n;
 };
 
-// Polygon features only; a feature's own PRESENCE/ORIGIN/SEASONAL (f.properties) win over the defaults in m; ID_NO is left blank for the assessor (SIS assigns it). COMPILER may be blank.
+// Polygon features only; a feature's own PRESENCE/ORIGIN/SEASONAL (f.properties; an official-patch 'recode' shape's presence counts as PRESENCE) win over the defaults in m; ID_NO is left blank for the assessor (SIS assigns it). COMPILER may be blank.
 export function buildIucn(features, m) {
   if (!m.sciName) throw new Error('SCI_NAME is required.');
   const d = m.derived; // { by, created, file } when the drawing is an edited copy of a community range
@@ -27,7 +27,7 @@ export function buildIucn(features, m) {
     CITATION: `RangeCraft community range, ${m.url}${d ? `. Derived from ${d.by} ${d.created}, ${d.file}` : ''}`,
     SOURCE: [d && `Derived from ${d.by} ${d.created}; edited in RangeCraft`, m.source].filter(Boolean).join('. '), DIST_COMM: `Map status: ${status}.${m.countries?.length ? ` Countries: ${m.countries.join(', ')}.` : ''}${m.source ? ` ${m.source}` : ''}`,
   };
-  return { type: 'FeatureCollection', features: features.map(f => ({ type: 'Feature', properties: { ...props, ...Object.fromEntries(Object.keys(CODES).map(k => [k, code(k, f.properties?.[k] ?? dflt[k])])) }, geometry: f.geometry })) };
+  return { type: 'FeatureCollection', features: features.map(f => ({ type: 'Feature', properties: { ...props, ...Object.fromEntries(Object.keys(CODES).map(k => [k, code(k, f.properties?.[k] ?? (k === 'PRESENCE' && f.properties?.op === 'recode' ? f.properties.presence : undefined) ?? dflt[k])])) }, geometry: f.geometry })) };
 }
 
 export const iucnFilename = (sciName, year) => `${String(sciName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'range'}-iucn-${year}.geojson`;

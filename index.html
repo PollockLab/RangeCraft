@@ -156,6 +156,11 @@
             </details>
           </div>
         </div>
+        <fieldset id="cut-reason" hidden><legend>Why is this area cut?</legend>
+          <label><input type="radio" name="cut-reason" value="cut" checked> Mapping error (remove)</label>
+          <label><input type="radio" name="cut-reason" value="5"> Extirpated (keep as Extinct)</label>
+          <label><input type="radio" name="cut-reason" value="4"> Possibly extirpated (keep as Possibly Extinct)</label>
+        </fieldset>
         <p id="msg" role="status" aria-live="polite" class="muted"></p>
       </section>
     </aside>

@@ -49,6 +49,11 @@ test('DIST_COMM carries map status then sources; bad status throws', () => {
   assert.equal(dc({ countries: [], source: '' }), 'Map status: Incomplete.');
 });
 
+test('a recode patch shape exports its presence; an explicit PRESENCE still wins', () => {
+  const ps = buildIucn([{ geometry: geom, properties: { op: 'recode', presence: 5 } }, { geometry: geom, properties: { op: 'cut' } }], m).features.map(f => f.properties.PRESENCE);
+  assert.deepEqual(ps, [5, 1]);
+});
+
 test('per-feature codes override the defaults; invalid feature codes throw', () => {
   const ps = buildIucn([{ geometry: geom, properties: { PRESENCE: '3' } }, { geometry: geom }], { ...m, presence: 2, origin: 4 }).features.map(f => f.properties);
   assert.deepEqual(ps.map(p => [p.PRESENCE, p.ORIGIN]), [[3, 4], [2, 4]]);

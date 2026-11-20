@@ -44,6 +44,11 @@ def parse_created(value) -> date:
         raise RangeError(f"created {value!r} is not an ISO date") from e
 
 
+def _valid_op(p: dict) -> bool:
+    """add and cut; recode keeps the area but codes it extirpated (IUCN presence 5 Extinct or 4 Possibly Extinct)."""
+    return p.get("op") in ("add", "cut") or (p.get("op") == "recode" and type(p.get("presence")) is int and p["presence"] in (4, 5))
+
+
 def load_range(path: Path, today: date | None = None) -> dict:
     """Parse and validate one range file. Returns {meta, geometry}. Raises RangeError."""
     today = today or date.today()
@@ -87,8 +92,8 @@ def load_range(path: Path, today: date | None = None) -> dict:
     if meta.get("basis") == "expert-outline-edit" and not meta.get("derived_from"):
         raise RangeError("basis expert-outline-edit requires derived_from (the source outline)")
     if meta.get("basis") == "official-patch" and (
-            not meta.get("base") or not all((f.get("properties") or {}).get("op") in ("add", "cut") for f in feats)):
-        raise RangeError("official-patch requires base and an op (add or cut) on every feature")
+            not meta.get("base") or not all(_valid_op(f.get("properties") or {}) for f in feats)):
+        raise RangeError("official-patch requires base and an op (add, cut, or recode with presence 4 or 5) on every feature")
     geoms = []
     for i, f in enumerate(feats):
         try:
