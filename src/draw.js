@@ -80,6 +80,7 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
       map.getCanvas().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
       return true;
     },
+    selected: () => selected,
     mode: () => sketchOp ?? td.getMode(),
     setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m === 'static' ? 'select' : m); }, // idle = select mode, so a click on any drawn shape selects it,
     // Finished polygons only, not helper points or the one being drawn.
