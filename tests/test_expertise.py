@@ -98,7 +98,7 @@ def test_relay_orcid_submitter_used_directly(monkeypatch):
 
 
 def test_relay_inat_submitter_used_directly(monkeypatch):
-    sub = {"provider": "inat", "id": "bird_nerd", "name": "B", "verified": True}
+    sub = {"provider": "inat", "id": "678", "login": "bird_nerd", "name": "B", "verified": True}
     e, _ = _relay_entry(monkeypatch, sub, "inat")
     assert (e["orcid"], e["inat_login"], e["verified"]) == (None, "bird_nerd", True)
 

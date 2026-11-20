@@ -118,8 +118,8 @@ def expert_entry(author: str, ranges: list, cache: dict, offline: bool) -> dict:
     sub = last.get("submitter") if last.get("identity") in ("orcid", "inat") else None
     if sub and sub["provider"] == "orcid" and valid_orcid(sub["id"]):
         orcid, login = sub["id"], None  # the declared other id is not covered by the sign-in
-    elif sub and sub["provider"] == "inat":
-        orcid, login = None, sub["id"]
+    elif sub and sub["provider"] == "inat" and sub.get("login"):
+        orcid, login = None, sub["login"]  # id is the numeric credit key, the API lookup needs the login
     else:
         sub = None
     e = {"author": author, "display": last["display"], "orcid": orcid, "inat_login": login,

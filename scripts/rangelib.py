@@ -126,11 +126,14 @@ def valid_orcid(value) -> bool:
 
 
 def valid_submitter(sub) -> bool:
-    """Shape of the relay's submitter property. Email identities can never be verified."""
+    """Shape of the relay's submitter property. Email identities can never be verified. github and
+    inat ids are the permanent numeric ids (logins are renameable), `login` is display/lookup only."""
     return (isinstance(sub, dict) and sub.get("provider") in RELAY_PROVIDERS
             and all(isinstance(sub.get(k), str) and sub[k] for k in ("id", "name"))
             and isinstance(sub.get("verified"), bool)
-            and not (sub["provider"] == "email" and sub["verified"]))
+            and isinstance(sub.get("login", ""), str)
+            and not (sub["provider"] == "email" and sub["verified"])
+            and not (sub["provider"] in ("github", "inat") and not sub["id"].isdigit()))
 
 
 def file_submitter(path: Path) -> dict | None:

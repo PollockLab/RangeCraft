@@ -214,6 +214,8 @@ def test_valid_loads(tmp_path):
     ({"created": "2999-01-01"}, "future"),
     ({"taxonKey": 999}, "directory"),
     ({"submitter": {"provider": "orcid", "id": "x"}}, "submitter"),
+    ({"submitter": {"provider": "github", "id": "alice", "name": "n", "verified": True}}, "submitter"),
+    ({"submitter": {"provider": "inat", "id": "678", "login": 5, "name": "n", "verified": True}}, "submitter"),
     ({"submitter": {"provider": "email", "id": "x", "name": "n", "verified": True}}, "submitter"),
 ])
 def test_bad_metadata(tmp_path, over, msg):
@@ -321,3 +323,8 @@ def test_git_origin_submitter_ignored_unless_relay_added_it(tmp_path):
 def test_git_origin_relay_with_malformed_submitter_falls_back(tmp_path):
     bad = {"provider": "email", "id": "ab12", "name": "E", "verified": True}  # email cannot be verified
     assert git_origin(_relay_file(tmp_path, bad))[1] == "unverified"
+
+
+def test_git_origin_relay_keys_on_numeric_id_not_login(tmp_path):
+    sub = {"provider": "github", "id": "12345", "login": "alice", "name": "A", "verified": True}
+    assert git_origin(_relay_file(tmp_path, sub))[:2] == ("github:12345", "github")
