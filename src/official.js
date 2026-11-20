@@ -8,6 +8,9 @@ const PROJ_JS = 'https://unpkg.com/proj4@2.12.1/dist/proj4.js';
 
 export const sdmTiles = slug =>
   `https://tiler2.biodiversite-quebec.ca/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url=${encodeURIComponent(COG(slug))}&colormap_name=viridis&rescale=0,99&nodata=255`;
+// One lon/lat box as an 8-bit gray + alpha PNG (no colormap or rescale): gray = raw 0-100 score, alpha 0 = nodata. The tiler allows any origin, so canvas reads work.
+export const sdmRawBox = (slug, [w, s, e, n]) =>
+  `https://tiler2.biodiversite-quebec.ca/cog/bbox/${w},${s},${e},${n}.png?url=${encodeURIComponent(COG(slug))}&nodata=255&max_size=1024`;
 // Tiler's WGS84 extent; MapLibre bounds cannot wrap the antimeridian, so a wrapped box keeps its western part.
 export async function sdmBounds(slug) {
   try {

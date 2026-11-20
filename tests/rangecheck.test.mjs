@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, summaryLine, gbifCellUrl, inatCellUrl, CONUS } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, summaryLine, gbifCellUrl, inatCellUrl, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -83,4 +83,58 @@ test('CONUS coverage excludes Ontario and Ottawa but keeps Chicago and Ohio', ()
   const t = inside(CONUS);
   assert.ok(!t(-80, 46.5) && !t(-75.7, 45.4));
   assert.ok(t(-87.6, 41.9) && t(-83, 40) && t(-93, 46));
+});
+
+// Habitat suitability on the 2-degree grid above (range lon 0..10, lat 80..90).
+test('classify with suitability splits every category and sets the 90% threshold', () => {
+  const suit = (lon, lat) => lon > 40 ? null : lat > 90 || lat < 80 || lon < 0 ? 10 : lon < 8 || (lon > 12 && lon < 24) ? 80 : 10;
+  const counts = new Map();
+  for (const lon of [1, 3, 5, 7]) for (const lat of [89, 87, 85]) counts.set(key(lon, lat), 2); // 12 in-range bins scoring 80
+  counts.set(key(9, 89), 1); // in range, scores 10: sorted [10, 80 x12], index floor(1.3) = 1 -> threshold 80
+  counts.set(key(15, 89), 4); // outside, suitable
+  counts.set(key(25, 89), 6); // outside, low
+  const r = classify(counts, range, 2, { suit });
+  assert.equal(r.threshold, 80);
+  const by = s => r.cells.filter(c => c.status === s);
+  assert.deepEqual(by('outside').map(c => c.count), [4]);
+  assert.deepEqual(by('outsideLow').map(c => c.count), [6]);
+  assert.equal(by('gap').length + by('lowgap').length, r.gaps);
+  assert.equal(by('lowgap').length, r.lowGaps);
+  assert.ok(by('lowgap').length > 0 && by('gap').length > 0);
+  assert.equal(by('survey').length, 0); // the ring bins next to the range score 10
+});
+
+test('survey ring: suitable no-record bins one bin from the range only', () => {
+  const r = classify(new Map([[key(1, 89), 3]]), range, 2, { suit: () => 50 });
+  assert.equal(r.threshold, 50);
+  const s = r.cells.filter(c => c.status === 'survey');
+  assert.ok(s.some(c => c.w === 10) && !s.some(c => c.w === 12));
+  for (const c of s) assert.ok(c.w >= -2 && c.e <= 12 && c.s >= 78 && c.n <= 92);
+  assert.equal(r.cells.filter(c => c.status === 'lowgap').length, 0);
+});
+
+test('classify without a usable model keeps the plain categories', () => {
+  for (const o of [{}, { suit: () => 50 }]) { // second: no in-range record to set a threshold
+    const r = classify(new Map([[key(21, 89), 15]]), range, 2, o);
+    assert.equal(r.threshold, null);
+    assert.deepEqual([...new Set(r.cells.map(c => c.status))].sort(), ['gap', 'outside']);
+  }
+});
+
+test('nodata bins count as low suitability; sdmNote wording', () => {
+  const r = classify(new Map([[key(1, 89), 1]]), range, 2, { suit: lon => lon < 2 ? 40 : null });
+  assert.equal(r.threshold, 40);
+  assert.equal(r.lowGaps, 20); // the 4 free bins in the scoring column stay suitable
+  assert.match(sdmNote(r, 'ok'), /at least 40.*90%/);
+  assert.equal(sdmNote(r, 'none'), 'No habitat model for this species, so gaps are not habitat-checked.');
+  assert.match(sdmNote({ threshold: null }, 'ok'), /not habitat-checked/);
+});
+
+test('sampler reads gray+alpha pixels of a lon/lat box', () => {
+  const d = new Uint8ClampedArray(2 * 2 * 4); // box 0..10 x 0..10, 2x2 px: row 0 is the north
+  d.set([5, 5, 5, 255, 6, 6, 6, 255, 7, 7, 7, 255, 8, 8, 8, 0]);
+  const s = sampler([0, 0, 10, 10], 2, d);
+  assert.equal(s(2, 8), 5); assert.equal(s(8, 8), 6); assert.equal(s(2, 2), 7);
+  assert.equal(s(8, 2), null); // alpha 0 = nodata
+  assert.equal(s(-1, 5), null); assert.equal(s(5, 11), null); // outside the box
 });

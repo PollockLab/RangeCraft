@@ -1,12 +1,27 @@
 // Range check wiring: toggle, counting, map layer, popup. Logic lives in rangecheck.js.
 import { loadRange, densityTile } from './api.js';
 import * as rc from './rangecheck.js';
+import { sdmRawBox } from './official.js';
 
 const $ = id => document.getElementById(id);
 
 // state: { taxon, official }. Returns { clear, legend }; clear() resets the toggle and layer (call on taxon change).
 export function initRangeCheck({ map, state, onChange, drawing, draft = () => [] }) {
-  const LABELS = { outside: 'records outside range (range may be too small, or misIDs)', gap: 'no records yet (check effort or habitat)', unmapped: 'not mapped by this source' };
+  const PLAIN = { outside: 'records outside range (range may be too small, or misIDs)', gap: 'no records yet (check effort or habitat)', unmapped: 'not mapped by this source' };
+  const HABITAT = { outside: 'outside range, suitable, with records: range likely too small', outsideLow: 'outside range, low suitability, with records: check IDs or the model',
+    gap: 'in range, suitable, no records yet (check effort)', lowgap: 'in range, low suitability (check the range edge)', survey: 'outside range, suitable, no records: worth surveying', unmapped: PLAIN.unmapped };
+  let LABELS = PLAIN, present = new Set(), threshold = null;
+  // Samples the raw habitat model over the box in one request; null when it cannot be read.
+  async function loadSuit(slug, box) {
+    try {
+      box = [Math.max(-180, box[0]), Math.max(-85, box[1]), Math.min(180, box[2]), Math.min(85, box[3])];
+      const r = await fetch(sdmRawBox(slug, box));
+      if (!r.ok) return null;
+      const bmp = await createImageBitmap(await r.blob(), { colorSpaceConversion: 'none' }), g = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d', { willReadFrequently: true });
+      g.drawImage(bmp, 0, 0);
+      return rc.sampler(box, bmp.width, g.getImageData(0, 0, bmp.width, bmp.height).data);
+    } catch { return null; }
+  }
   const LAYERS = ['rc-fill', 'rc-hatch'];
   let rcRun = 0, hasUnmapped = false;
   function clear(msg = '') {
@@ -46,7 +61,15 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         }
       }));
       if (stale()) return;
-      const res = rc.classify(counts, fc, size, { coverage });
+      let suit = null, why = 'none';
+      if (state.official) {
+        $('rc-summary').textContent = 'Reading the habitat model...';
+        suit = await loadSuit(state.official.slug, rc.tilesBox(tiles, size)); why = suit ? 'ok' : 'unreadable';
+        if (stale()) return;
+      }
+      const res = rc.classify(counts, fc, size, { coverage, suit });
+      threshold = res.threshold; LABELS = threshold == null ? PLAIN : HABITAT;
+      present = new Set(res.cells.map(c => c.status));
       hasUnmapped = res.unmapped > 0;
       for (const id of LAYERS) if (map.getLayer(id)) map.removeLayer(id);
       if (map.getSource('rc')) map.removeSource('rc');
@@ -54,10 +77,10 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       map.addSource('rc', { type: 'geojson', data: rc.toGeoJSON(res.cells) });
       map.addLayer({ id: 'rc-hatch', type: 'fill', source: 'rc', filter: ['==', ['get', 'status'], 'unmapped'], paint: { 'fill-pattern': 'rc-hatch' } }, 'occ');
       map.addLayer({ id: 'rc-fill', type: 'fill', source: 'rc', filter: ['!=', ['get', 'status'], 'unmapped'], paint: {
-        'fill-color': ['match', ['get', 'status'], 'outside', rc.COLORS.outside, rc.COLORS.gap],
+        'fill-color': ['match', ['get', 'status'], 'outside', rc.COLORS.outside, 'outsideLow', rc.COLORS.outsideLow, 'lowgap', rc.COLORS.lowgap, 'survey', rc.COLORS.survey, rc.COLORS.gap],
         // red fades for stray records: 1-2 records are faint, 100+ solid
-        'fill-opacity': ['case', ['==', ['get', 'status'], 'gap'], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
-      $('rc-summary').textContent = rc.summaryLine(res, ref, coverage && 'conterminous US');
+        'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
+      $('rc-summary').textContent = rc.summaryLine(res, ref, coverage && 'conterminous US') + ' ' + rc.sdmNote(res, why);
       onChange();
     } catch (e) { if (!stale()) clear(`Range check failed: ${e.message}`); }
   }
@@ -74,8 +97,8 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   for (const id of LAYERS) map.on('click', id, e => {
     if (drawing()) return;
     const p = e.features[0].properties, el = document.createElement('div');
-    el.append(p.status === 'gap' ? `${LABELS.gap}.` : `${LABELS[p.status]} (${p.count} record${p.count === 1 ? '' : 's'}).`);
-    if (p.status === 'gap') {
+    el.append(p.count === 0 ? `${LABELS[p.status]}.` : `${LABELS[p.status]} (${p.count} record${p.count === 1 ? '' : 's'}).`);
+    if (p.status === 'gap' || p.status === 'survey') {
       for (const [text, href] of [['Look on iNaturalist', rc.inatCellUrl(state.taxon.name, p)], ['Look on GBIF', rc.gbifCellUrl(state.taxon.key, p)]]) {
         el.append(Object.assign(document.createElement('a'), { href, textContent: text, target: '_blank', rel: 'noopener' }));
       }
@@ -83,6 +106,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     }
     new maplibregl.Popup().setLngLat(e.lngLat).setDOMContent(el).addTo(map);
   });
-  const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => k !== 'unmapped' || hasUnmapped).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k] })) : [];
+  const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range bins with records reach.`;
+  const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => threshold == null ? k !== 'unmapped' || hasUnmapped : present.has(k)).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k], ...(threshold != null && k !== 'unmapped' && { title: tip() }) })) : [];
   return { clear, legend, refresh };
 }
