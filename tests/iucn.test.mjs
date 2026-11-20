@@ -23,9 +23,17 @@ test('code lists and bounds', () => {
   assert.throws(() => buildIucn([], { ...m, seasonal: 6 }), /SEASONAL/);
 });
 
-test('missing name or compiler, blank source, default year', () => {
+test('derived copy: SOURCE and CITATION name the origin, user sources are appended', () => {
+  const derived = { by: 'USGS GAP', created: '2018-08-15', file: 'data/ranges/1/usgs-gap.geojson' };
+  const p = buildIucn([{ geometry: geom }], { ...m, source: '', derived }).features[0].properties;
+  assert.equal(p.SOURCE, 'Derived from USGS GAP 2018-08-15; edited in RangeCraft');
+  assert.equal(p.CITATION, 'RangeCraft community range, https://x/#taxon=1. Derived from USGS GAP 2018-08-15, data/ranges/1/usgs-gap.geojson');
+  assert.equal(buildIucn([{ geometry: geom }], { ...m, derived }).features[0].properties.SOURCE, 'Derived from USGS GAP 2018-08-15; edited in RangeCraft. field notes');
+});
+
+test('missing name, blank compiler and source, default year', () => {
   assert.throws(() => buildIucn([], { ...m, sciName: '' }), /SCI_NAME/);
-  assert.throws(() => buildIucn([], { ...m, compiler: '' }), /COMPILER/);
+  assert.equal(buildIucn([{ geometry: geom }], { ...m, compiler: '' }).features[0].properties.COMPILER, '');
   const p = buildIucn([{ geometry: geom }], { ...m, source: undefined, year: undefined }).features[0].properties;
   assert.equal(p.SOURCE, '');
   assert.equal(p.YEAR, new Date().getFullYear());

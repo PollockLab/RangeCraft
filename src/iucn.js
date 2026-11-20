@@ -13,15 +13,16 @@ const code = (k, v) => {
   return n;
 };
 
-// Polygon features only; ID_NO is left blank for the assessor (SIS assigns it).
+// Polygon features only; ID_NO is left blank for the assessor (SIS assigns it). COMPILER may be blank.
 export function buildIucn(features, m) {
   if (!m.sciName) throw new Error('SCI_NAME is required.');
-  if (!m.compiler) throw new Error('COMPILER is required.');
+  const d = m.derived; // { by, created, file } when the drawing is an edited copy of a community range
   const props = {
     ID_NO: '', SCI_NAME: m.sciName,
     PRESENCE: code('PRESENCE', m.presence ?? DEFAULTS.PRESENCE), ORIGIN: code('ORIGIN', m.origin ?? DEFAULTS.ORIGIN), SEASONAL: code('SEASONAL', m.seasonal ?? DEFAULTS.SEASONAL),
-    COMPILER: m.compiler, YEAR: m.year ?? new Date().getFullYear(), CITATION: `RangeCraft community range, ${m.url}`,
-    SOURCE: m.source || '', DIST_COMM: 'Drawn in RangeCraft. Planning aid, not ground truth.',
+    COMPILER: m.compiler || '', YEAR: m.year ?? new Date().getFullYear(),
+    CITATION: `RangeCraft community range, ${m.url}${d ? `. Derived from ${d.by} ${d.created}, ${d.file}` : ''}`,
+    SOURCE: [d && `Derived from ${d.by} ${d.created}; edited in RangeCraft`, m.source].filter(Boolean).join('. '), DIST_COMM: 'Drawn in RangeCraft. Planning aid, not ground truth.',
   };
   return { type: 'FeatureCollection', features: features.map(f => ({ type: 'Feature', properties: { ...props }, geometry: f.geometry })) };
 }

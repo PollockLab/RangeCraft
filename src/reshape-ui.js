@@ -27,7 +27,7 @@ export function initReshape({ draw, say }) {
       try { next = reshape(op, before.features.map(f => f.geometry), sketch, polygonClipping); } catch (e) { say(`Could not ${op} that area: ${e.message}`); return; }
       busy = true;
       try { d.load({ type: 'FeatureCollection', features: next.map(geometry => ({ type: 'Feature', geometry, properties: {} })) }); prev = before; }
-      catch (e) { say(`Could not ${op} that area: ${/holes/.test(e.message) ? 'the editor cannot hold a hole, so sketch across the edge of the range instead' : e.message}`); d.load(before); }
+      catch (e) { say(`Could not ${op} that area: ${e.message}`); d.load(before); }
       busy = false;
       if (prev === before) say(op === 'add' ? 'Area added.' : next.length ? 'Area cut.' : 'Everything was cut. Undo to get it back.');
       showUndo();

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reshape, polygonArea } from '../src/reshape.js';
+import { reshape, polygonArea, totalArea } from '../src/reshape.js';
 
 const sq = (x, y, s) => ({ type: 'Polygon', coordinates: [[[x, y], [x + s, y], [x + s, y + s], [x, y + s], [x, y]]] });
 const area = gs => gs.reduce((s, g) => s + polygonArea(g.coordinates), 0);
@@ -35,4 +35,10 @@ test('real clip: add grows, cut shrinks, cut inside keeps a hole, cut all emptie
   assert.equal(area(holed), 96);
   assert.deepEqual(reshape('cut', base, sq(-1, -1, 12), real), []);
   assert.equal(area(reshape('add', base, sq(20, 20, 1), real)), 101);
+});
+
+test('totalArea sums parts and subtracts holes; empty is 0', () => {
+  const holed = { type: 'Polygon', coordinates: [...sq(0, 0, 10).coordinates, ...sq(3, 3, 2).coordinates] };
+  assert.equal(totalArea([holed, sq(20, 20, 1)]), 97);
+  assert.equal(totalArea([]), 0);
 });
