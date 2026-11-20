@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from datetime import date
 
@@ -12,9 +13,11 @@ from rangelib import (
     credit,
     exportable,
     git_origin,
+    identity_from_commit,
     load_range,
     skill,
     superseded,
+    taxon_windows,
     valid_orcid,
     window_for_taxon,
     wkt_limited,
@@ -97,19 +100,70 @@ def test_superseded_keeps_latest_same_author_only():
     assert superseded(items) == {"a"}
 
 
-def test_git_origin_uses_first_add_commit(tmp_path):
+def test_identity_from_commit():
+    assert identity_from_commit("123+alice@users.noreply.github.com", "Alice A") == (
+        "alice", "github")
+    assert identity_from_commit("Bob-1@users.noreply.github.com", "B") == ("Bob-1", "github")
+    assert identity_from_commit("alice@example.com", "Alice A") == ("Alice A", "unverified")
+    # spoof attempts: noreply lookalikes must not yield a verified login
+    assert identity_from_commit("x@users.noreply.github.com.evil.io", "X")[1] == "unverified"
+    assert identity_from_commit("a b@users.noreply.github.com", "X")[1] == "unverified"
+    assert identity_from_commit("", "")[0] == "unknown"
+
+
+def _commit(cwd, email, name, msg, date_=None):
+    env = {**os.environ, "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email,
+           "GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email}
+    if date_:
+        env |= {"GIT_AUTHOR_DATE": date_, "GIT_COMMITTER_DATE": date_}
+    subprocess.run(["git", "commit", "-qam", msg], cwd=cwd, check=True, env=env)
+
+
+def test_git_origin_first_parent_add_commit(tmp_path):
     f = tmp_path / "r.geojson"
     f.write_text("{}")
-    _, day = git_origin(f)  # untracked: local user, today
-    assert day == date.today().isoformat()
-    env = ["-c", "user.name=Real Person", "-c", "user.email=r@x"]
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    assert git_origin(f)[1:] == ("unverified", date.today().isoformat())  # untracked
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", "r.geojson"], cwd=tmp_path, check=True)
-    subprocess.run(["git", *env, "commit", "-qm", "add"], cwd=tmp_path, check=True)
+    _commit(tmp_path, "7+alice@users.noreply.github.com", "Alice", "add")
     f.write_text("{ }")
-    subprocess.run(["git", "-c", "user.name=Other", "-c", "user.email=o@x", "commit", "-qam", "e"],
-                   cwd=tmp_path, check=True)
-    assert git_origin(f)[0] == "Real Person"
+    _commit(tmp_path, "o@x.io", "Other", "edit")
+    assert git_origin(f)[:2] == ("alice", "github")  # later editor does not take over
+    assert git_origin(f)[2] == date.today().isoformat()
+
+
+def test_git_origin_ignores_side_branch_commits(tmp_path):
+    # a contributor's backdated side-branch commit must not win over the first-parent merge
+    def run(*a, env=None):
+        subprocess.run(["git", *a], cwd=tmp_path, check=True, env=env)
+
+    run("init", "-q", "-b", "main")
+    (tmp_path / "seed").write_text("1")
+    run("add", "seed")
+    _commit(tmp_path, "m@x.io", "Maint", "seed")
+    run("checkout", "-q", "-b", "pr")
+    f = tmp_path / "r.geojson"
+    f.write_text("{}")
+    run("add", "r.geojson")
+    _commit(tmp_path, "evil@x.io", "Evil", "backdated", "2001-01-01T00:00:00")
+    run("checkout", "-q", "main")
+    bot = "9+bot@users.noreply.github.com"
+    run("merge", "-q", "--no-ff", "pr", "-m", "merge", env={
+        **os.environ, "GIT_COMMITTER_NAME": "GitHub", "GIT_COMMITTER_EMAIL": bot,
+        "GIT_AUTHOR_NAME": "GitHub", "GIT_AUTHOR_EMAIL": bot})
+    key, ident, day = git_origin(f)
+    assert (key, ident) == ("bot", "github")
+    assert day == date.today().isoformat()
+
+
+def test_taxon_windows_exclude_uncounted():
+    items = [{"id": "a", "taxonKey": 1, "geometry": box(0, 0, 1, 1)},
+             {"id": "b", "taxonKey": 1, "geometry": box(50, 50, 60, 60)},  # inflater
+             {"id": "c", "taxonKey": 2, "geometry": box(5, 5, 6, 6)}]
+    w = taxon_windows(items, {"a", "c"})
+    assert w[1].bounds == (-2, -2, 3, 3)  # b excluded
+    assert set(w) == {1, 2}
+    assert taxon_windows(items, set()) == {}
 
 
 def test_exportable_license_gate():
@@ -138,7 +192,7 @@ def _write(tmp_path, doc, key="123"):
 
 
 def _fc(**over):
-    props = {"taxonKey": 123, "author": "a", "created": "2025-01-01", **over}
+    props = {"taxonKey": 123, "author": "a", "github": "a", "created": "2025-01-01", **over}
     props = {k: v for k, v in props.items() if v is not None}
     geom = {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}
     return {"type": "FeatureCollection", "properties": props,
@@ -153,6 +207,7 @@ def test_valid_loads(tmp_path):
 @pytest.mark.parametrize("over,msg", [
     ({"taxonKey": None}, "taxonKey"),
     ({"author": None}, "author"),
+    ({"github": None}, "github"),
     ({"created": None}, "created"),
     ({"taxonKey": "abc"}, "numeric"),
     ({"created": "not-a-date"}, "ISO"),

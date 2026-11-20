@@ -1,28 +1,47 @@
 """Validate every range file under data/ranges. Exit 1 with messages on any failure.
 
-If env PR_AUTHOR is set (CI: the PR opener's GitHub login), warn when a file's `author` differs.
+If env PR_AUTHOR is set (CI: the PR opener's GitHub login), a range file changed in the PR whose
+`github` property differs is an error (all files if the diff cannot be computed).
 """
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 
 from rangelib import RANGES_DIR, ROOT, RangeError, load_range
 
 
+def author_mismatch(meta: dict, pr_author: str) -> str | None:
+    if pr_author and str(meta.get("github", "")).casefold() != pr_author.casefold():
+        return f"github {meta.get('github')!r} differs from PR author {pr_author!r}"
+    return None
+
+
+def changed_files() -> set[str] | None:
+    base = os.environ.get("GITHUB_BASE_REF")
+    if not base:
+        return None
+    r = subprocess.run(["git", "diff", "--name-only", f"origin/{base}...HEAD"], cwd=ROOT,
+                       capture_output=True, text=True, check=False)
+    return set(r.stdout.split()) if r.returncode == 0 else None
+
+
 def main() -> int:
     files = sorted(RANGES_DIR.glob("*/*.geojson"))
     pr_author = os.environ.get("PR_AUTHOR", "").strip()
+    changed = changed_files() if pr_author else None
     errors = []
     for f in files:
+        rel = f.relative_to(ROOT)
         try:
             meta = load_range(f)["meta"]
         except RangeError as e:
-            errors.append(f"{f.relative_to(ROOT)}: {e}")
+            errors.append(f"{rel}: {e}")
             continue
-        if pr_author and meta["author"].casefold() != pr_author.casefold():
-            print(f"WARNING {f.relative_to(ROOT)}: author {meta['author']!r} differs from "
-                  f"PR author {pr_author!r} (credit is keyed on the git author)", file=sys.stderr)
+        msg = author_mismatch(meta, pr_author) if changed is None or rel.as_posix() in changed else None
+        if msg:
+            errors.append(f"{rel}: {msg}")
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)
     print(f"validated {len(files)} range file(s), {len(errors)} error(s)")

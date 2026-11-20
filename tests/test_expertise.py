@@ -49,7 +49,7 @@ def test_expert_entry_mocked_http(monkeypatch):
             return {"results": [{"description": "github.com/alice"}]}
         return {"researcher-url": []}
     monkeypatch.setattr(ex, "get_json", fake)
-    rng = [{"display": "Alice", "orcid": "0000-0002-1825-0097", "inat_login": "al",
+    rng = [{"display": "Alice", "identity": "github", "orcid": "0000-0002-1825-0097", "inat_login": "al",
             "taxonKey": 5, "scientificName": "Hyla x"}]
     e = ex.expert_entry("alice", rng, {}, offline=False)
     assert e["verified"] and e["works_total"] == 30 and e["h_index"] == 6
@@ -64,3 +64,17 @@ def test_expert_entry_offline_or_no_identity_makes_no_calls(monkeypatch):
     assert ex.expert_entry("a", [r], {}, offline=False)["taxa"] == {}
     r["inat_login"] = "x"
     assert ex.expert_entry("a", [r], {}, offline=True)["taxa"] == {}
+
+
+def test_unverified_identity_never_verified(monkeypatch):
+    # profile links github.com/Alice (the display name) but the credit key is unverified
+    def fake(url, params=None):
+        if url.endswith("/users/al"):
+            return {"results": [{"description": "github.com/Alice github.com/Alice-Smith"}]}
+        return {}
+    monkeypatch.setattr(ex, "get_json", fake)
+    r = {"display": "Alice", "identity": "unverified", "orcid": None, "inat_login": "al",
+         "taxonKey": 5}
+    assert not ex.expert_entry("Alice-Smith", [r], {}, offline=False)["verified"]
+    r["identity"] = "github"
+    assert ex.expert_entry("Alice-Smith", [r], {}, offline=False)["verified"]

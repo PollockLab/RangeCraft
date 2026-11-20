@@ -19,7 +19,6 @@ import argparse
 import json
 import sys
 import time
-from collections import defaultdict
 
 import requests
 from shapely.geometry import mapping
@@ -35,7 +34,7 @@ from rangelib import (
     load_range,
     skill,
     superseded,
-    window_for_taxon,
+    taxon_windows,
     wkt_limited,
 )
 
@@ -60,12 +59,11 @@ def gbif_count(taxon_key, wkt, event_date=None) -> int:
             time.sleep(2 * (attempt + 1))
 
 
-def score_range(taxon_key, geom, window, edit_date) -> dict:
-    wkt, tol, simple = wkt_limited(geom)
+def score_range(taxon_key, window, edit_date, simple, tol, i_all, wkt) -> dict:
     wwkt, _, _ = wkt_limited(window)
     ratio = min(1.0, area_km2(simple) / area_km2(window))
     w_all, w_post = gbif_count(taxon_key, wwkt), gbif_count(taxon_key, wwkt, edit_date)
-    i_all, i_post = gbif_count(taxon_key, wkt), gbif_count(taxon_key, wkt, edit_date)
+    i_post = gbif_count(taxon_key, wkt, edit_date)
     s = skill(i_post, w_post, ratio)
     return {
         "window_all": w_all, "window_post": w_post, "inside_all": i_all, "inside_post": i_post,
@@ -91,35 +89,44 @@ def main() -> int:
             bad += 1
             continue
         m = rng["meta"]
-        git_author, edit_date = git_origin(f)
+        git_author, identity, edit_date = git_origin(f)
         items.append({
             "id": f"{m['taxonKey']}/{f.stem}", "taxonKey": int(m["taxonKey"]), "meta": m,
-            "file": rel, "geometry": rng["geometry"], "git_author": git_author,
+            "file": rel, "geometry": rng["geometry"], "git_author": git_author, "identity": identity,
             "edit_date": edit_date,
         })
 
-    by_taxon = defaultdict(list)
-    for it in items:
-        by_taxon[it["taxonKey"]].append(it["geometry"])
-    windows = {k: window_for_taxon(v) for k, v in by_taxon.items()}
     dupes = superseded(items)
+    evidence = {it["id"] for it in items if it["id"] not in dupes}
+    prep = {}
+    if not args.offline:
+        # inside_all needs no window, so zero-evidence ranges are dropped before windows are built.
+        for it in items:
+            if it["id"] in evidence:
+                wkt, tol, simple = wkt_limited(it["geometry"])
+                prep[it["id"]] = (wkt, tol, simple, gbif_count(it["taxonKey"], wkt))
+        evidence = {i for i in evidence if prep[i][3] > 0}
+    windows = taxon_windows(items, evidence)
 
     index, features = [], []
     for it in items:
         m = it["meta"]
-        counted = it["id"] not in dupes
+        counted = it["id"] in evidence
+        reason = None if counted else ("superseded" if it["id"] in dupes else "no_evidence")
         score = None
         if counted and not args.offline:
-            score = score_range(it["taxonKey"], it["geometry"], windows[it["taxonKey"]],
-                                it["edit_date"])
+            wkt, tol, simple, i_all = prep[it["id"]]
+            score = score_range(it["taxonKey"], windows[it["taxonKey"]], it["edit_date"],
+                                simple, tol, i_all, wkt)
         entry = {
             "id": it["id"], "taxonKey": it["taxonKey"], "scientificName": m.get("scientificName"),
-            "author": it["git_author"], "display": m["author"], "orcid": m.get("orcid"),
+            "author": it["git_author"], "identity": it["identity"], "display": m["author"],
+            "github": m["github"], "orcid": m.get("orcid"),
             "inat_login": m.get("inat_login"), "basis": m.get("basis"), "parent": m.get("parent"),
             "derived_from": m.get("derived_from"),
             "derived_from_license": m.get("derived_from_license"),
             "created": str(m["created"]), "edit_date": it["edit_date"], "file": it["file"],
-            "counted": counted, "score": score,
+            "counted": counted, "reason": reason, "score": score,
         }
         index.append(entry)
         # Outlines derived from non-CC-BY sources keep their score but not their geometry.

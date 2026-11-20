@@ -7,9 +7,10 @@ Expertise is not in-app points. Per author (git author of the first commit) and 
   papers_on_taxon / papers_on_genus       OpenAlex works by the author's ORCID matching the name
   works_total, h_index                    OpenAlex author totals
 ORCID and iNaturalist logins are SELF-DECLARED in the range file. `verified` is true only if the
-iNaturalist profile description or the ORCID researcher-urls contain github.com/<name>, where
-<name> is the git author or the declared author. Git author names are often not GitHub logins, so
-false negatives are expected; treat verified=false as "unconfirmed", not "false".
+iNaturalist profile description or the ORCID researcher-urls contain github.com/<login>, where
+<login> is the GitHub login derived from the merge commit's noreply author email (identity
+"github"). Names from files or free-form git authors are never used; those authors stay
+unverified. Treat verified=false as "unconfirmed", not "false".
 """
 from __future__ import annotations
 
@@ -121,7 +122,7 @@ def expert_entry(author: str, ranges: list, cache: dict, offline: bool) -> dict:
         if orcid else None
     if oa:
         e["works_total"], e["h_index"] = oa[1], oa[2]
-    names = (author, last["display"])
+    names = (author,) if last.get("identity") == "github" else ()
     e["verified"] = verified(
         get_json(INAT + "users/" + login) if login else None,
         get_json(f"{ORCID_API}{orcid}/researcher-urls") if orcid else None, names)

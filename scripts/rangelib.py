@@ -19,7 +19,7 @@ from shapely.prepared import prep
 ROOT = Path(__file__).resolve().parent.parent
 RANGES_DIR = ROOT / "data" / "ranges"
 EARTH_R_KM = 6371.0088
-REQUIRED = ("taxonKey", "author", "created")
+REQUIRED = ("taxonKey", "author", "created", "github")
 BASES = ("expert-outline-edit", "new")
 PERMISSIVE_LICENSES = ("CC0", "CC-BY-4.0", "OGL-Canada-2.0")
 MAX_PARTS = 200
@@ -61,8 +61,8 @@ def load_range(path: Path, today: date | None = None) -> dict:
         raise RangeError(f"taxonKey {meta['taxonKey']!r} is not numeric")
     if str(meta["taxonKey"]) != Path(path).parent.name:
         raise RangeError(f"taxonKey {meta['taxonKey']} does not match directory name")
-    if not isinstance(meta["author"], str):
-        raise RangeError("author must be a string")
+    if not isinstance(meta["author"], str) or not isinstance(meta["github"], str):
+        raise RangeError("author and github must be strings")
     # created is informational only (scoring uses the git first-add date), but may not be future.
     if parse_created(meta["created"]) > today:
         raise RangeError(f"created {meta['created']} is in the future")
@@ -126,21 +126,50 @@ def exportable(meta: dict) -> bool:
     return meta.get("derived_from_license") in PERMISSIVE_LICENSES
 
 
-def git_origin(path: Path) -> tuple[str, str]:
-    """(author name, ISO date) of the commit that first added the file.
+NOREPLY = re.compile(r"^(?:\d+\+)?([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)@users\.noreply\.github\.com$",
+                     re.IGNORECASE)
 
-    Prospective cutoff and credit owner come from git history, not file properties, so neither
-    can be backdated or spoofed by the submitter. Uncommitted files: local git user, today.
+
+def identity_from_commit(email: str, name: str) -> tuple[str, str]:
+    """(credit key, identity). GitHub noreply email -> (login, "github"); else (name, "unverified").
+
+    GitHub sets the noreply author email on squash merges from the PR author, so the login is
+    not contributor-chosen. A free-form name or email is spoofable and stays "unverified".
     """
+    m = NOREPLY.match(email.strip())
+    return (m.group(1), "github") if m else (name.strip() or "unknown", "unverified")
+
+
+def git_origin(path: Path) -> tuple[str, str, str]:
+    """(credit key, identity, ISO date) from the commit that first added the file.
+
+    Uses first-parent history, so with squash merges this is the merge commit: its date is set by
+    GitHub, not the contributor. Prospective cutoff and credit owner never come from file
+    properties. Uncommitted files: local git user, "unverified", today.
+    """
+    cwd = Path(path).parent
     out = subprocess.run(
-        ["git", "log", "--diff-filter=A", "--follow", "--format=%an%x09%cs", "--", str(path)],
-        cwd=Path(path).parent, capture_output=True, text=True, check=False).stdout.strip()
+        ["git", "log", "--first-parent", "--diff-filter=A", "--follow",
+         "--format=%ae%x09%an%x09%cs", "--", str(path)],
+        cwd=cwd, capture_output=True, text=True, check=False).stdout.strip()
     if out:
-        name, day = out.splitlines()[-1].split("\t")
-        return name, day
-    who = subprocess.run(["git", "config", "user.name"], cwd=Path(path).parent,
-                         capture_output=True, text=True, check=False).stdout.strip()
-    return who or "unknown", date.today().isoformat()
+        email, name, day = out.splitlines()[-1].split("\t")
+        return (*identity_from_commit(email, name), day)
+    who = subprocess.run(["git", "config", "user.name"], cwd=cwd, capture_output=True,
+                         text=True, check=False).stdout.strip()
+    return who or "unknown", "unverified", date.today().isoformat()
+
+
+def taxon_windows(items: list[dict], evidence: set[str]) -> dict:
+    """Null window per taxon from counted ranges only (superseded and zero-evidence excluded).
+
+    items: dicts with id, taxonKey, geometry. evidence: ids to include.
+    """
+    by_taxon: dict = {}
+    for it in items:
+        if it["id"] in evidence:
+            by_taxon.setdefault(it["taxonKey"], []).append(it["geometry"])
+    return {k: window_for_taxon(v) for k, v in by_taxon.items()}
 
 
 def iou(a: BaseGeometry, b: BaseGeometry) -> float:
