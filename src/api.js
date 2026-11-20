@@ -1,4 +1,6 @@
 // Data access: GBIF suggest/tiles and the repo's static JSON files.
+import { readTile } from './mvt.js';
+import { SQUARE } from './rangecheck.js';
 export const REPO = 'PollockLab/rangecraft';
 // Base URL of the deployed relay worker (see worker/README.md). Empty hides sign-in and relay submit.
 export const RELAY_URL = '';
@@ -18,6 +20,15 @@ export async function speciesName(key) {
 
 export const occurrenceTiles = key =>
   `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${encodeURIComponent(key)}&srs=EPSG:3857&style=classic.poly&bin=hex`;
+
+// GBIF square-binned density tile (EPSG:4326, 4096 extent) as [{ x, y, props: { total } }].
+export async function densityTile(key, { z, x, y }, signal) {
+  const url = `https://api.gbif.org/v2/map/occurrence/density/${z}/${x}/${y}.mvt?taxonKey=${encodeURIComponent(key)}&srs=EPSG:4326&bin=square&squareSize=${SQUARE}`;
+  let r = await fetch(url, { signal });
+  for (let wait = 500; r.status === 429 && wait <= 4000; wait *= 2) { await new Promise(ok => setTimeout(ok, wait)); r = await fetch(url, { signal }); } // rate limited: back off
+  if (!r.ok) throw new Error(`GBIF ${r.status}`);
+  return readTile(await r.arrayBuffer());
+}
 
 // Missing or malformed file => fallback, so the UI shows an empty state.
 async function json(path, fallback) {
