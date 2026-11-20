@@ -20,3 +20,11 @@ test('malformed input is dropped', () => {
   assert.deepEqual(s.ranges, ['1/ok']);
   assert.equal(s.at, undefined);
 });
+
+test('preview: only a commit sha and a file under the same taxon', () => {
+  const sha = 'a'.repeat(40);
+  assert.equal(parseHash(`#taxon=1&preview=${sha}/1/x-1.geojson`).preview, `${sha}/1/x-1.geojson`);
+  assert.equal(parseHash(`#taxon=1&preview=${sha}/2/x.geojson`).preview, undefined);
+  assert.equal(parseHash(`#taxon=1&preview=main/1/x.geojson`).preview, undefined);
+  assert.equal(parseHash(`#taxon=1&preview=${sha}/1/../x.geojson`).preview, undefined);
+});

@@ -22,6 +22,7 @@ from shapely.ops import unary_union
 
 from rangelib import IOU_DUPLICATE, ROOT, RangeError, area_km2, iou, load_range, shape
 
+SITE = "https://pollocklab.github.io/rangecraft/"
 MARKER = "<!-- rangecraft-review -->"
 MAX_GEOJSON = 50_000  # GitHub comments cap at 65,536 characters
 STYLE = {
@@ -129,6 +130,13 @@ def map_block(new: BaseGeometry, old: BaseGeometry) -> list[str]:
     return ["", "```geojson", text, "```", *note]
 
 
+def preview_url(path: str, head: str) -> str:
+    """Site link that draws this file at the PR's commit next to the published and official ranges."""
+    sha = git("rev-parse", head).strip()
+    taxon = Path(path).parent.name
+    return f"{SITE}#taxon={taxon}&official=1&preview={sha}/{taxon}/{Path(path).name}"
+
+
 def plain(value, limit: int = 200) -> str:
     """PR-supplied text as one line with markdown, HTML and mention characters escaped."""
     text = " ".join(str(value or "").split())[:limit]
@@ -152,7 +160,8 @@ def section(path: str, head: str, base: str) -> str:
     lines = [
         f"### {plain(meta.get('scientificName') or meta['taxonKey'])} by {who}",
         "",
-        f"`{name}` · basis `{meta.get('basis') or 'unset'}`",
+        (f"`{name}` · basis `{meta.get('basis') or 'unset'}` · "
+        f"[**View on RangeCraft next to the official outline**]({preview_url(path, head)})"),
     ]
     if meta.get("message"):
         lines += ["", f"> {plain(meta['message'])}"]
