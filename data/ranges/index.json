@@ -6,15 +6,7 @@
     "author": "example",
     "created": "2025-01-01",
     "file": "data/ranges/10806364/dryophytes-versicolor.geojson",
-    "score": {
-      "inside": 2723,
-      "total": 3000,
-      "precision": 0.9077,
-      "prospective_inside": 2723,
-      "prospective_total": 3000,
-      "area_km2": 3374939.5,
-      "credit": 803.699
-    }
+    "score": null
   },
   {
     "id": "2427072/lithobates-sylvaticus",
@@ -23,14 +15,6 @@
     "author": "example",
     "created": "2025-01-01",
     "file": "data/ranges/2427072/lithobates-sylvaticus.geojson",
-    "score": {
-      "inside": 2937,
-      "total": 3000,
-      "precision": 0.979,
-      "prospective_inside": 2937,
-      "prospective_total": 3000,
-      "area_km2": 3986381.1,
-      "credit": 966.098
-    }
+    "score": null
   }
 ]
