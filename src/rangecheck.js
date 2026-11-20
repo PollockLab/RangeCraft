@@ -91,7 +91,7 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
   for (let j = j0; j <= j1; j++)
     for (let i = i0; i <= i1; i++) {
       if (counts.has(`${i},${j}`) || !rin(i, j)) continue;
-      const [x, y] = centre(i, j, size), good = ok(x, y);
+      const [x, y] = centre(i, j, size); if (covered && !covered(x, y)) continue; const good = ok(x, y);
       gaps++; if (!good) lowGaps++;
       inRange.push([threshold == null ? null : suit(x, y), cellArea(cellBox(i, j, size))]);
       cells.push({ status: good ? 'gap' : 'lowgap', count: 0, score: threshold == null ? null : suit(x, y), ...cellBox(i, j, size) });
