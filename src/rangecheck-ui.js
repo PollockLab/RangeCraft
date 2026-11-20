@@ -7,9 +7,9 @@ const $ = id => document.getElementById(id);
 
 // state: { taxon, official }. Returns { clear, legend }; clear() resets the toggle and layer (call on taxon change).
 export function initRangeCheck({ map, state, onChange, drawing, draft = () => [] }) {
-  const PLAIN = { outside: 'records outside range (range may be too small, or misIDs)', gap: 'no records yet (check effort or habitat)', unmapped: 'not mapped by this source' };
-  const HABITAT = { outside: 'outside range, suitable, with records: range likely too small', outsideLow: 'outside range, low suitability, with records: check IDs or the model',
-    gap: 'in range, suitable, no records yet (check effort)', lowgap: 'in range, low suitability (check the range edge)', survey: 'outside range, suitable, no records: worth surveying', unmapped: PLAIN.unmapped };
+  const PLAIN = { outside: 'Records outside your range: range may be too small (or misIDs)', gap: 'Inside your range, no records yet (check effort or habitat)', unmapped: 'Not mapped by this source' };
+  const HABITAT = { outside: 'Records outside your range, good habitat: range likely too small', outsideLow: 'Records outside your range, poor habitat: check IDs or the model',
+    gap: 'Inside your range, good habitat, no records yet (check effort)', lowgap: 'Inside your range, poor habitat (check the range edge)', survey: 'Good habitat outside, unsurveyed', unmapped: PLAIN.unmapped };
   let LABELS = PLAIN, present = new Set(), threshold = null, targets = '';
   // Samples the raw habitat model over the box in one request; null when it cannot be read.
   async function loadSuit(slug, box) {
@@ -87,7 +87,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
       const covered = coverage && 'conterminous US', sum = $('rc-summary'), list = document.createElement('ul');
       list.replaceChildren(...rc.summaryItems(res).map(t => Object.assign(document.createElement('li'), { textContent: t })));
-      sum.replaceChildren(Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, ref) }), list);
+      sum.replaceChildren(Object.assign(document.createElement('em'), { textContent: 'Rough guide: gaps often mean nobody has looked there yet.' }), document.createElement('br'), Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, ref) }), list);
       sum.title = rc.summaryTip(res, covered, why);
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
@@ -125,7 +125,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       el.append(Object.assign(document.createElement('a'), { href: rc.inatIdentifyUrl(state.taxon.name, p), textContent: 'Help verify these IDs on iNaturalist', target: '_blank', rel: 'noopener' }));
     new maplibregl.Popup().setLngLat(e.lngLat).setDOMContent(el).addTo(map);
   });
-  const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range bins with records reach.`;
+  const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range grid cells with records reach.`;
   const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => threshold == null ? k !== 'unmapped' || hasUnmapped : present.has(k)).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k], ...(threshold != null && k !== 'unmapped' && { title: tip() }) })) : [];
   return { clear, legend, refresh };
 }

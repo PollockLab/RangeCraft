@@ -17,7 +17,7 @@ export function polygonsOf(gj) {
   return geoms.flatMap(g => g?.type === 'Polygon' ? [g] : g?.type === 'MultiPolygon' ? g.coordinates.map(coordinates => ({ type: 'Polygon', coordinates })) : []);
 }
 
-export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch = () => {}, onEdit = () => {}) {
+export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch = () => {}, onEdit = () => {}, onDrawn = () => {}) {
   const td = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
     modes: [
@@ -33,8 +33,8 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   td.on('deselect', () => { selected = null; onSelect(null); });
   // Add/Cut tools draw with the freehand mode; the finished sketch is handed to onSketch(op, polygon) and removed.
   let sketchOp = null;
-  td.on('finish', id => {
-    if (!sketchOp) return onChange();
+  td.on('finish', (id, ctx) => {
+    if (!sketchOp) { onChange(); if (ctx?.action === 'draw') onDrawn(); return; }
     const f = td.getSnapshot().find(x => x.id === id);
     td.removeFeatures([id]);
     if (f) onSketch(sketchOp, f.geometry);

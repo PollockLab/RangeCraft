@@ -127,7 +127,7 @@ test('nodata bins count as low suitability; sdmNote wording', () => {
   assert.equal(r.threshold, 40);
   assert.equal(r.lowGaps, 20); // the 4 free bins in the scoring column stay suitable
   assert.match(sdmNote(r, 'ok'), /at least 40.*90%/);
-  assert.match(summaryTip(r, null, 'ok'), /at least 40.*90%.*20 in-range bins have low suitability/);
+  assert.match(summaryTip(r, null, 'ok'), /at least 40.*90%.*20 in-range grid cells have low suitability/);
   assert.equal(sdmNote(r, 'none'), 'No habitat model for this species, so gaps are not habitat-checked.');
   assert.match(sdmNote({ threshold: null }, 'ok'), /not habitat-checked/);
 });
@@ -152,11 +152,11 @@ test('surveyCsv ranks by score, caps, escapes, and is header-only when empty', (
   assert.equal(surveyCsv([], { name: 'a', key: 1 }), 'rank,kind,lat,lon,suitability,inat_url,gbif_url\n');
 });
 
-test('summaryItems lists survey bins only with a model; verdict follows outsidePct', () => {
+test('summaryItems lists survey grid cells only with a model; verdict follows outsidePct', () => {
   const base = { total: 10, outsidePct: 0, gapPct: 5 };
   assert.equal(summaryItems({ ...base, threshold: null, survey: 3 }).length, 2);
-  assert.equal(summaryItems({ ...base, threshold: 40, survey: 12 })[2], '12 bins just outside the range look suitable but have no records: worth surveying');
-  assert.match(summaryItems({ ...base, threshold: 40, survey: 1 })[2], /^1 bin just outside the range looks suitable but has no records/);
+  assert.equal(summaryItems({ ...base, threshold: 40, survey: 12 })[2], '12 grid cells just outside the range look suitable but have no records: worth surveying');
+  assert.match(summaryItems({ ...base, threshold: 40, survey: 1 })[2], /^1 grid cell just outside the range looks suitable but has no records/);
   assert.equal(summaryItems({ ...base, threshold: 40, survey: 0, lowRecords: 0 }).length, 2);
   for (const [pct, text] of [[0, 'Range fits the records well'], [9.9, 'Range fits the records well'], [10, 'Range may be too small in places'], [30, 'Range may be too small in places'], [30.1, 'Many records fall outside this range']])
     assert.equal(verdict({ total: 5, outsidePct: pct }, 'official outline'), `${text} (vs official outline)`);

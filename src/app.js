@@ -5,11 +5,11 @@ import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } f
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
 import { initDraw } from './draw.js';
-import { renderBoard, findExpert, expertiseLine, shownName } from './board.js';
+import { renderBoard, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
 import { buildHash, parseHash } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
-import { buildIucn, iucnFilename, CODES, DEFAULTS } from './iucn.js';
+import { initIucnUi } from './iucn-ui.js';
 import { initRangeCheck } from './rangecheck-ui.js';
 import { initReshape } from './reshape-ui.js';
 import { initCopy } from './copy.js';
@@ -59,7 +59,9 @@ const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard, reshape.apply, () => reshape.reset()); syncTools(); });
+// After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
+const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard, reshape.apply, () => reshape.reset(), drawn); syncTools(); });
 $('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
 syncTools();
@@ -95,10 +97,11 @@ function setRustgis(file) {
   if (file) a.href = `https://web.rustgis.app/?blank&data=${encodeURIComponent(`https://raw.githubusercontent.com/${REPO}/main/${file.startsWith('data/') ? file : `data/ranges/${file}`}`)}`;
 }
 
-// Until a species is picked, the layer toggles and drawing tools do nothing: disable them with a reason.
+// Until a species is picked, the layer toggles do nothing (disabled with a reason) and the drawing toolbar is hidden.
 const LOCKED = ['occ-toggle', 'rc-toggle', ...Object.values(TOOLS).filter(id => id !== 't-cut')], NEED = 'Pick a species first';
 function lock(on) {
   for (const id of LOCKED) { const e = $(id); e.dataset.tip ??= e.title; e.disabled = on; e.title = on ? NEED : e.dataset.tip; }
+  $('tools').hidden = on;
   $('draw-hint').textContent = on ? 'Pick a species to start.' : 'Draw on the map to propose a range';
 }
 lock(true);
@@ -177,16 +180,6 @@ async function toggleRange(r, color, on) {
   map.setLayoutProperty(`${id}-line`, 'visibility', 'visible');
 }
 
-const fmtScore = (s, r) => {
-  if (!s) return 'not yet scored';
-  const bits = [];
-  if (s.window_all) bits.push(`${Math.round((s.inside_all / s.window_all) * 100)}% of all nearby GBIF records inside`);
-  bits.push(s.window_post ? `${s.inside_post}/${s.window_post} records since edit inside` : 'no records since edit yet');
-  if (s.skill != null) bits.push(`skill ${Number(s.skill).toFixed(2)} (new records inside vs expected by chance)`);
-  if (r.edit_date) bits.push(`added ${r.edit_date}${r.identity === 'source' && r.created && r.created !== r.edit_date ? ` (source ${r.created})` : ''}`);
-  return bits.join(', ');
-};
-
 async function showVersions(fit = true) {
   clearRanges();
   const ul = $('versions');
@@ -252,7 +245,7 @@ function current(needName = false) {
   const features = draw?.all() ?? [];
   if (!features.length) { say('Draw at least one polygon first.'); return null; }
   const author = $('author').value.trim();
-  if (needName && !author) { say('Enter a display name.'); openPropose(true); $('me').open = true; $('author').focus(); return null; }
+  if (needName && !author) { say('Enter a display name.'); openPropose(true); $('author').focus(); return null; }
   const github = $('github').value.trim();
   if (github && !GITHUB_RE.test(github)) { say('GitHub username: letters, digits, hyphens, up to 39.'); $('github').focus(); return null; }
   const orcid = $('orcid').value.trim(), inat = $('inat').value.trim();
@@ -270,32 +263,7 @@ $('propose').addEventListener('click', () => {
   else { download(fc); say(`Range too large for a link. Downloaded; upload it at github.com/PollockLab/rangecraft under data/ranges/${fc.properties.taxonKey}/ via "Add file > Upload files", then open a pull request.`); }
 });
 
-// ---- IUCN Red List export ----
-for (const [k, labels] of Object.entries(CODES)) {
-  const sel = Object.assign(document.createElement('select'), { id: `iucn-${k}` });
-  sel.append(...labels.map((l, i) => Object.assign(document.createElement('option'), { value: i + 1, textContent: `${i + 1} ${l}`, selected: i + 1 === DEFAULTS[k] })));
-  const field = Object.assign(document.createElement('div'), { className: 'field' });
-  field.append(Object.assign(document.createElement('label'), { htmlFor: sel.id, textContent: k[0] + k.slice(1).toLowerCase() }), sel);
-  $('iucn-codes').append(field);
-}
-$('export-iucn').addEventListener('click', async () => {
-  try {
-    if (!state.taxon) throw new Error('Select a species first.');
-    let features = draw?.all() ?? [], compiler = $('author').value.trim();
-    const drawn = features.length > 0;
-    if (!features.length) { // no drawing: use the ticked community ranges
-      const rs = [...document.querySelectorAll('#versions input:checked')].map(b => state.index.find(r => `v-${r.id}` === b.id)).filter(Boolean);
-      if (!rs.length) throw new Error('Draw a polygon or tick a community range first.');
-      features = (await Promise.all(rs.map(r => loadRange(r.file)))).flatMap(fc => fc.features ?? []);
-      compiler = [...new Set(rs.map(r => shownName(r.author)))].join('; ');
-    }
-    writeHash();
-    const m = { sciName: state.taxon.name, compiler, url: location.href, source: $('sources').value.trim(), year: new Date().getFullYear(), derived: drawn ? state.copy?.derived : undefined };
-    for (const k of Object.keys(CODES)) m[k.toLowerCase()] = $(`iucn-${k}`).value;
-    download(buildIucn(features, m), iucnFilename(m.sciName, m.year));
-    say('Downloaded IUCN-format GeoJSON. ID_NO is blank for the assessor.');
-  } catch (e) { say(e.message); }
-});
+initIucnUi({ $, state, draw: () => draw, say, writeHash });
 
 // ---- relay: submit without a GitHub account ----
 const stashDraft = () => relay.saveDraft({ features: draw?.all() ?? [], ...Object.fromEntries(['author', 'github', 'orcid', 'inat', 'sources'].map(k => [k, $(k).value])) });
@@ -450,9 +418,9 @@ const ME = ['author', 'github', 'orcid', 'inat'];
 try {
   const me = JSON.parse(localStorage.getItem('rc-me') || '{}');
   for (const k of ME) if (typeof me[k] === 'string') $(k).value = me[k];
-  $('me').open = !!me.author;
+  $('me').open = ME.slice(1).some(k => me[k]);
 } catch {}
-$('me').addEventListener('input', () => { try { localStorage.setItem('rc-me', JSON.stringify(Object.fromEntries(ME.map(k => [k, $(k).value])))); } catch {} });
+$('propose-form').addEventListener('input', () => { try { localStorage.setItem('rc-me', JSON.stringify(Object.fromEntries(ME.map(k => [k, $(k).value])))); } catch {} });
 
 // ---- tabs ----
 const tabs = [['tab-map', 'view-map'], ['tab-board', 'view-board']];

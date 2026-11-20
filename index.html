@@ -39,11 +39,11 @@
         <h2 id="s1">Species</h2>
         <div class="field">
           <label for="q" class="sr">Species</label>
-          <input id="q" type="search" autocomplete="off" placeholder="Search all species, e.g. Danaus plexippus" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
+          <input id="q" type="search" autocomplete="off" placeholder="Common or Latin name" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
           <ul id="results" role="listbox" hidden></ul>
         </div>
         <div id="intro">
-          <p>RangeCraft checks species ranges against GBIF records and a habitat model, then lets you fix them. Try one:</p>
+          <p><strong>Correct a species range in 3 steps:</strong> pick a species, draw where it occurs, propose it with your sources.</p>
           <div class="examples">
             <button type="button" class="example" data-key="2427072" data-name="Lithobates sylvaticus">Wood Frog</button>
             <button type="button" class="example" data-key="2480446" data-name="Haliaeetus leucocephalus">Bald Eagle</button>
@@ -54,7 +54,7 @@
         <div id="chips" class="chips" role="group" aria-label="Browse species with ranges by group"></div>
         <p id="chips-note" class="muted"></p>
         <ul id="group-list" class="plain" hidden></ul>
-        <details id="how">
+        <details id="how" open>
           <summary>How it works</summary>
           <ol>
             <li>Pick a species.</li>
@@ -67,35 +67,35 @@
 
       <section class="step" aria-labelledby="s2">
         <h2 id="s2">Compare</h2>
-        <!-- One .lyr row per layer: [swatch + toggle] label, optional control, info icon with a title tooltip. -->
+        <!-- One .lyr row per layer: [swatch + toggle] label, optional control, info icon (details popover). -->
         <div class="layers">
           <div class="lyr">
             <label class="check"><input type="checkbox" id="occ-toggle" checked><i class="sw" style="background:linear-gradient(90deg,#ffe066,#e5383b)"></i> GBIF occurrences</label>
-            <span class="info" tabindex="0" title="GBIF occurrence records for this species (heat map).">ⓘ</span>
+            <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>GBIF occurrence records for this species (heat map).</p></details>
           </div>
           <div class="lyr">
-            <label class="check"><input type="checkbox" id="rc-toggle"><i class="sw" style="background:linear-gradient(90deg,#d62828,#1d6fd1,#2a9d4b)"></i> Range check</label>
-            <span class="info" tabindex="0" title="Compares GBIF records with the official outline if shown, else the shown community ranges. Absence of records is not absence of the species: gaps mostly show where nobody has looked (sampling effort).">ⓘ</span>
+            <label class="check"><input type="checkbox" id="rc-toggle"><i class="sw" style="background:linear-gradient(90deg,#d62828,#1d6fd1,#2a9d4b)"></i> Check my range against GBIF records</label>
+            <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>Compares GBIF records with the official outline if shown, else the shown community ranges. Absence of records is not absence of the species: gaps mostly show where nobody has looked (sampling effort).</p></details>
           </div>
           <div class="sub" id="rc-summary" role="status"></div>
-          <button id="rc-targets" type="button" class="linkbtn" hidden title="Download a CSV of up to 50 suitable bins with no records, best habitat first">Survey targets (CSV)</button>
+          <button id="rc-targets" type="button" class="linkbtn" hidden title="Download a CSV of up to 50 suitable grid cells with no records, best habitat first">Survey targets (CSV)</button>
           <a id="rc-blitz" class="sub" href="https://openbiodiversity.ca/" target="_blank" rel="noopener" title="Blitz the Gap 2026 on openbiodiversity.ca: a citizen-science campaign to fill these gaps">Survey them in Blitz the Gap</a>
           <div id="official" hidden>
             <div class="lyr">
               <span class="check"><i class="sw dashed"></i> Official range</span>
               <button id="official-load" type="button">Show</button>
-              <span class="info" tabindex="0" title="ECCC/IUCN expert outline: reference only, not redistributed. Coarse outlines can spill past coastlines. Do not trace or copy it: its license does not allow republishing under CC BY 4.0.">ⓘ</span>
+              <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>ECCC/IUCN expert outline: reference only, not redistributed. Coarse outlines can spill past coastlines. Do not trace or copy it: its license does not allow republishing under CC BY 4.0.</p></details>
             </div>
             <p class="sub"><span id="official-note"></span> <a id="gbif-out" target="_blank" rel="noopener" href="#">All records on GBIF</a></p>
             <div class="lyr">
               <label class="check"><input type="checkbox" id="sdm-toggle"><i class="sw" style="background:linear-gradient(90deg,#440154,#21918c,#fde725)"></i> Habitat model</label>
-              <span class="info" tabindex="0" title="Habitat suitability model, 1980-2010. Context only, not a range.">ⓘ</span>
+              <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>Habitat suitability model, 1980-2010. Context only, not a range.</p></details>
             </div>
           </div>
           <div id="agree-body" hidden>
             <div class="lyr">
               <label class="check"><input type="checkbox" id="agree-toggle" checked><i class="sw" id="agree-sw"></i> Agreement map</label>
-              <span class="info" tabindex="0" title="Where the community ranges converge and where the edge is contested. Needs 2+ ranges.">ⓘ</span>
+              <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>Where the community ranges converge and where the edge is contested. Needs 2+ ranges.</p></details>
             </div>
             <div class="sub"><span id="agree-summary"></span> <span id="agree-legend"></span></div>
           </div>
@@ -120,14 +120,14 @@
         <div id="propose-box" hidden>
           <button id="open-propose" type="button" class="primary" aria-expanded="false" aria-controls="propose-form">Propose your range</button>
           <div id="propose-form" hidden>
+            <div class="field"><label for="author">Display name</label><input id="author" autocomplete="name"></div>
+            <div class="field"><label for="sources">Sources and evidence (required)</label><textarea id="sources" rows="2" placeholder="Citations, expert knowledge, links"></textarea></div>
             <details id="me">
-              <summary>Your details</summary>
-              <div class="field"><label for="author">Display name</label><input id="author" autocomplete="name"></div>
-              <div class="field"><label for="github">GitHub username (optional)</label><input id="github" autocomplete="username"></div>
-              <div class="field"><label for="orcid">ORCID (optional)</label><input id="orcid" placeholder="0000-0002-1825-0097" autocomplete="off"></div>
-              <div class="field"><label for="inat">iNaturalist username (optional)</label><input id="inat" autocomplete="off"></div>
+              <summary>More about you (optional)</summary>
+              <div class="field"><label for="github">GitHub username</label><input id="github" autocomplete="username"></div>
+              <div class="field"><label for="orcid">ORCID</label><input id="orcid" placeholder="0000-0002-1825-0097" autocomplete="off"></div>
+              <div class="field"><label for="inat">iNaturalist username</label><input id="inat" autocomplete="off"></div>
             </details>
-            <div class="field"><label for="sources">Sources and evidence (required to propose)</label><textarea id="sources" rows="2" placeholder="Citations, expert knowledge, links"></textarea></div>
             <div id="relay" hidden>
               <p id="relay-who" class="muted"></p>
               <div id="relay-buttons" class="actions"></div>
@@ -136,7 +136,7 @@
               <p id="relay-link" role="status"></p>
             </div>
             <div class="actions">
-              <button id="propose" type="button" class="primary">Propose edit</button>
+              <button id="propose" type="button" class="primary">Submit for review</button>
               <button id="export" type="button">Export GeoJSON</button>
             </div>
             <details id="iucn">

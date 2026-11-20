@@ -41,8 +41,8 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 #how { font-size:.85rem; margin:.2rem 0; }
 #how ol { margin:.3rem 0 .3rem 1.2rem; padding:0; }
 #how button { margin-top:.3rem; min-height:0; padding:.1rem .5rem; }
-/* life-form chips: one scrollable row */
-.chips { display:flex; gap:.3rem; margin:.3rem 0; overflow-x:auto; padding-bottom:.2rem; scrollbar-width:thin; }
+/* life-form chips: wrapping row */
+.chips { display:flex; flex-wrap:wrap; gap:.3rem; margin:.3rem 0; }
 .chip { min-height:0; padding:.15rem .5rem; border-radius:99px; font-size:.8rem; white-space:nowrap; flex:none; }
 .chip b { font-weight:600; color:var(--muted); }
 .chip[aria-pressed=true] b { color:inherit; }
@@ -54,7 +54,10 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 .lyr { display:flex; align-items:center; gap:.4rem; min-height:1.7rem; }
 .lyr .check { flex:1; }
 .lyr button { min-height:0; padding:.05rem .5rem; font-size:.8rem; }
-.info { color:var(--muted); cursor:help; font-size:.85rem; padding:0 .15rem; }
+.lyr { position:relative; }
+.info { margin:0; color:var(--muted); font-size:.85rem; padding:0 .15rem; }
+.info summary { font-weight:400; list-style:none; }
+.info p { position:absolute; right:0; top:100%; z-index:2; width:14rem; max-width:100%; margin:.1rem 0 0; padding:.3rem .5rem; background:var(--bg); border:1px solid var(--line); border-radius:6px; font-size:.8rem; color:var(--fg); box-shadow:0 1px 4px rgba(0,0,0,.2); }
 .sub { margin:0 0 .2rem 1.4rem; font-size:.8rem; color:var(--muted); display:block; }
 .sw { display:inline-block; width:.9rem; height:.7rem; border-radius:2px; flex:none; }
 .sw.dashed { height:0; border-top:2px dashed currentColor; border-radius:0; width:.9rem; background:none; }
@@ -79,7 +82,7 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 header #share .short { display:none; }
 #hint[data-idle=true], #hint:empty { display:none; }
 /* propose card: sticky footer of the panel */
-#propose-card { position:sticky; bottom:0; margin:0 -.75rem; padding:.5rem .75rem; background:var(--panel); border-top:1px solid var(--line); max-height:60%; overflow-y:auto; }
+#propose-card { position:sticky; bottom:0; margin:0 -.75rem; padding:.5rem .75rem; background:var(--panel); border-top:1px solid var(--line); max-height:40%; overflow-y:auto; }
 #propose-card p { margin:.2rem 0; }
 #open-propose { width:100%; }
 #propose-form { margin-top:.5rem; }
@@ -96,6 +99,9 @@ footer p { margin:.3rem 0; }
 @media (max-width: 600px) {
   #legend .lg-toggle { display:block; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
   #legend:not(.open) > div { display:none; }
+  #tools button, #tools label.btn, .chip { min-height:44px; }
+  input[type=checkbox] { width:24px; height:24px; }
+  #legend { left:.5rem; }
 }
 @media (max-width: 700px) {
   :root { --pw:100%; }
