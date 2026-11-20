@@ -6,9 +6,9 @@ export const GROUPS = [
   { id: 'amphibians', label: 'Amphibians', icon: '🐸' }, { id: 'reptiles', label: 'Reptiles', icon: '🐍' }, { id: 'other', label: 'Other animals', icon: '🐾' },
 ];
 const FISH = new Set(['Actinopterygii', 'Chondrichthyes', 'Elasmobranchii', 'Holocephali', 'Myxini', 'Petromyzonti', 'Cephalaspidomorphi', 'Sarcopterygii']);
-const BY_CLASS = { Insecta: 'insects', Arachnida: 'spiders', Aves: 'birds', Mammalia: 'mammals', Amphibia: 'amphibians', Reptilia: 'reptiles' };
+const BY_CLASS = { Insecta: 'insects', Arachnida: 'spiders', Aves: 'birds', Mammalia: 'mammals', Amphibia: 'amphibians', Reptilia: 'reptiles', Testudines: 'reptiles', Squamata: 'reptiles', Crocodylia: 'reptiles', Sphenodontia: 'reptiles' };
 
-// s: GBIF species record. null for kingdoms outside the groups (they still appear under All).
+// s: GBIF species record. The backbone has no Reptilia class, so reptile orders are listed. null for kingdoms outside the groups (they still appear under All).
 export function groupOf(s) {
   if (s?.kingdom === 'Plantae') return 'plants';
   if (s?.kingdom === 'Fungi') return 'fungi';

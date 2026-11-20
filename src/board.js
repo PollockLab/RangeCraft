@@ -5,7 +5,7 @@ const ORCID = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/, INAT = /^[A-Za-z0-9_-]{3,40}$/;
 const link = (href, text) => el('a', { href, textContent: text, rel: 'noopener', target: '_blank' });
 
 // Unverified commit names carry a namespace prefix so they cannot claim a GitHub login's credit.
-export const shownName = a => String(a ?? '').replace(/^unverified:/, '');
+export const shownName = a => String(a ?? '').replace(/^(unverified|source):/, '');
 export const findExpert = (experts, author) => experts.find(e => e.author?.toLowerCase() === String(author).toLowerCase());
 
 function ids(e) {

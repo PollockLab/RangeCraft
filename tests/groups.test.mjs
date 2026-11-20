@@ -7,6 +7,7 @@ test('groupOf maps GBIF classification to iconic groups', () => {
   assert.equal(groupOf({ kingdom: 'Fungi' }), 'fungi');
   assert.equal(groupOf({ kingdom: 'Animalia', class: 'Amphibia' }), 'amphibians');
   assert.equal(groupOf({ kingdom: 'Animalia', class: 'Actinopterygii' }), 'fish');
+  for (const c of ['Testudines', 'Squamata', 'Crocodylia', 'Sphenodontia']) assert.equal(groupOf({ kingdom: 'Animalia', class: c }), 'reptiles');
   assert.equal(groupOf({ kingdom: 'Animalia', phylum: 'Mollusca', class: 'Gastropoda' }), 'molluscs');
   assert.equal(groupOf({ kingdom: 'Animalia', class: 'Anthozoa' }), 'other');
   assert.equal(groupOf({ kingdom: 'Chromista' }), null);

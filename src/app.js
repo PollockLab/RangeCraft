@@ -34,6 +34,7 @@ const HINTS = {
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
   $('hint').textContent = HINTS[draw?.mode()] ?? 'Pick a tool, then draw on the map.';
+  $('hint').dataset.idle = !HINTS[draw?.mode()];
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }); syncTools(); });
@@ -68,7 +69,7 @@ function setRustgis(file) {
 }
 
 // ---- taxon selection ----
-async function selectTaxon({ key, name }) {
+async function selectTaxon({ key, name }, { fit = true } = {}) {
   state.taxon = { key: String(key), name };
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
@@ -79,7 +80,7 @@ async function selectTaxon({ key, name }) {
   setOfficialUi(null);
   state.officialReady = loadOfficialMatch(state.taxon);
   loadAgreement(state.taxon);
-  await showVersions();
+  await showVersions(fit);
   updateLegend();
   writeHash();
 }
@@ -97,6 +98,13 @@ function clearRanges() {
   state.shown.clear();
 }
 
+async function fitRanges(rs) {
+  const taxon = state.taxon, b = new maplibregl.LngLatBounds();
+  const walk = c => (typeof c[0] === 'number' ? b.extend(c) : c.forEach(walk));
+  try { for (const r of rs) for (const f of (await loadRange(r.file)).features ?? []) walk(f.geometry.coordinates); } catch { return; }
+  if (state.taxon === taxon && !b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0, maxZoom: 6 });
+}
+
 function updateLegend() {
   const items = [];
   if (state.taxon) {
@@ -104,7 +112,7 @@ function updateLegend() {
     if (state.official?.fc) items.push({ label: 'Official range (reference)', dashed: true });
     if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
-    if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all experts)', palette: PALETTE });
+    if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }
   setLegend(items);
 }
@@ -133,7 +141,7 @@ const fmtScore = (s, r) => {
   return bits.join(', ');
 };
 
-async function showVersions() {
+async function showVersions(fit = true) {
   clearRanges();
   const ul = $('versions');
   state.index ??= await loadIndex();
@@ -178,6 +186,7 @@ async function showVersions() {
     return li;
   }));
   rs.forEach((r, i) => toggleRange(r, COLORS[i % COLORS.length], true).catch(e => say(e.message)));
+  if (fit) fitRanges(rs);
 }
 
 // ---- export / propose ----
@@ -316,20 +325,25 @@ $('sdm-toggle').addEventListener('change', async e => {
 });
 
 // ---- agreement layer ----
+let noun = 'experts';
 async function loadAgreement(taxon) {
   for (const id of ['agree-fill']) if (map.getLayer(id)) map.removeLayer(id);
   if (map.getSource('agree')) map.removeSource('agree');
   $('agreement').hidden = false;
   $('agree-body').hidden = true;
   $('agree-empty').hidden = false;
+  state.index ??= await loadIndex();
   const [fc, sum] = await Promise.all([loadConsensus(taxon.key), loadConsensusSummary(taxon.key)]);
   if (state.taxon !== taxon || !fc) return;
+  const n = fc.properties?.voters?.length ?? fc.features[0].properties.voters;
+  if (n < 2) return;
   map.addSource('agree', { type: 'geojson', data: fc });
   map.addLayer({ id: 'agree-fill', type: 'fill', source: 'agree', paint: { 'fill-color': shareFill, 'fill-opacity': 0.55 },
     layout: { visibility: $('agree-toggle').checked ? 'visible' : 'none' } }, 'occ');
-  const n = fc.properties?.voters?.length ?? fc.features[0].properties.voters;
-  $('agree-summary').textContent = summaryText(sum);
-  $('agree-legend').replaceChildren(`k of ${n} experts agree: few `, ...PALETTE.map(c => Object.assign(document.createElement('span'), {
+  const rs = state.index.filter(r => String(r.taxonKey) === taxon.key);
+  noun = rs.length && rs.every(r => r.identity === 'source') ? 'sources' : 'experts';
+  $('agree-summary').textContent = summaryText(sum, noun);
+  $('agree-legend').replaceChildren(`k of ${n} ${noun} agree: few `, ...PALETTE.map(c => Object.assign(document.createElement('span'), {
     style: `display:inline-block;width:1rem;height:.8rem;background:${c}` })), ' all');
   $('agree-body').hidden = false;
   $('agree-empty').hidden = true;
@@ -341,7 +355,7 @@ $('agree-toggle').addEventListener('change', e => {
 });
 map.on('click', 'agree-fill', e => {
   if (['polygon', 'freehand'].includes(draw?.mode())) return;
-  new maplibregl.Popup().setLngLat(e.lngLat).setText(kOfN(e.features[0].properties)).addTo(map);
+  new maplibregl.Popup().setLngLat(e.lngLat).setText(kOfN(e.features[0].properties, noun)).addTo(map);
 });
 
 // ---- how it works, saved details ----
@@ -400,7 +414,7 @@ async function fromHash() {
   restoring = true;
   try {
     const name = await speciesName(s.taxon);
-    await selectTaxon({ key: s.taxon, name });
+    await selectTaxon({ key: s.taxon, name }, { fit: !s.at && !s.official });
     if (s.ranges) for (const b of document.querySelectorAll('#versions input[type=checkbox]')) {
       if (!s.ranges.includes(b.id.slice(2)) && b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); }
     }
