@@ -58,3 +58,12 @@ def test_imported_source_credits_publisher_not_committer():
     assert imported_source({"author": "Ana", "derived_from": "USGS GAP", "basis": "edit"}) is None
     assert imported_source({"author": "USGS GAP", "derived_from": "USGS GAP", "basis": "new", "github": "x"}) is None
     assert imported_source({"author": "Me Inc", "derived_from": "Me Inc", "basis": "new"}) is None
+
+
+def test_edits_of_published_outlines_are_not_source():
+    """A patch on, or edit of, a publisher's outline is the editor's work, so it keeps the git identity."""
+    from rangelib import imported_source
+    assert imported_source({"author": "Ann", "basis": "official-patch", "base": "usgs-gap"}) is None
+    assert imported_source({"author": "USGS GAP", "basis": "official-patch", "derived_from": "USGS GAP"}) is None
+    assert imported_source({"author": "Ann", "basis": "expert-outline-edit",
+                            "derived_from": "USGS GAP 2020, data/ranges/1/x.geojson"}) is None
