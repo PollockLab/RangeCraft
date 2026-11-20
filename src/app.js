@@ -122,7 +122,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   state.copy = null;
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
-  $('selected').hidden = $('intro').hidden = true; $('how').open = false; // collapse only, the saved rc-how preference is untouched
+  $('selected').hidden = $('intro').hidden = true; if (!$('how').dataset.seen) { $('how').dataset.seen = '1'; $('how').open = false; } // collapse on the first pick only; rc-how is untouched
   lock(false);
   steps();
   $('share').hidden = false;
