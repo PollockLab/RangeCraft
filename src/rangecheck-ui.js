@@ -24,11 +24,14 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   }
   const LAYERS = ['rc-fill', 'rc-hatch'];
   let rcRun = 0, hasUnmapped = false;
+  // Fade the GBIF heat map while checking so red outside-range bins stay distinct from dense occurrences.
+  const dimOcc = on => map.getLayer('occ') && map.setPaintProperty('occ', 'raster-opacity', on ? 0.35 : 1);
   function clear(msg = '') {
     rcRun++;
     for (const id of LAYERS) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource('rc')) map.removeSource('rc');
     $('rc-toggle').checked = false;
+    dimOcc(false);
     $('rc-summary').textContent = msg;
     $('rc-summary').title = '';
     $('rc-targets').hidden = true;
@@ -98,7 +101,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     a.click();
     URL.revokeObjectURL(a.href);
   });
-  $('rc-toggle').addEventListener('change', e => { if (e.target.checked) runRangeCheck(); else clear(); });
+  $('rc-toggle').addEventListener('change', e => { if (e.target.checked) { dimOcc(true); runRangeCheck(); } else clear(); });
   // Re-run when the compared layer changes (official toggle, ticks, drawing); debounced because drawing fires many changes.
   let timer;
   const refresh = () => { if ($('rc-toggle').checked) { clearTimeout(timer); timer = setTimeout(runRangeCheck, 500); } };
