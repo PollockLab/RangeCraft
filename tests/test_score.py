@@ -104,11 +104,11 @@ def test_identity_from_commit():
     assert identity_from_commit("123+alice@users.noreply.github.com", "Alice A") == (
         "alice", "github")
     assert identity_from_commit("Bob-1@users.noreply.github.com", "B") == ("Bob-1", "github")
-    assert identity_from_commit("alice@example.com", "Alice A") == ("Alice A", "unverified")
+    assert identity_from_commit("alice@example.com", "Alice A") == ("unverified:Alice A", "unverified")
     # spoof attempts: noreply lookalikes must not yield a verified login
     assert identity_from_commit("x@users.noreply.github.com.evil.io", "X")[1] == "unverified"
     assert identity_from_commit("a b@users.noreply.github.com", "X")[1] == "unverified"
-    assert identity_from_commit("", "")[0] == "unknown"
+    assert identity_from_commit("", "")[0] == "unverified:unknown"
 
 
 def _commit(cwd, email, name, msg, date_=None):

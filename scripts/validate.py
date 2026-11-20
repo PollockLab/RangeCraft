@@ -22,9 +22,9 @@ def changed_files() -> set[str] | None:
     base = os.environ.get("GITHUB_BASE_REF")
     if not base:
         return None
-    r = subprocess.run(["git", "diff", "--name-only", f"origin/{base}...HEAD"], cwd=ROOT,
+    r = subprocess.run(["git", "diff", "-z", "--name-only", f"origin/{base}...HEAD"], cwd=ROOT,
                        capture_output=True, text=True, check=False)
-    return set(r.stdout.split()) if r.returncode == 0 else None
+    return set(filter(None, r.stdout.split("\0"))) if r.returncode == 0 else None
 
 
 def main() -> int:

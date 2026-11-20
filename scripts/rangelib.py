@@ -137,7 +137,7 @@ def identity_from_commit(email: str, name: str) -> tuple[str, str]:
     not contributor-chosen. A free-form name or email is spoofable and stays "unverified".
     """
     m = NOREPLY.match(email.strip())
-    return (m.group(1), "github") if m else (name.strip() or "unknown", "unverified")
+    return (m.group(1), "github") if m else ("unverified:" + (name.strip() or "unknown"), "unverified")
 
 
 def git_origin(path: Path) -> tuple[str, str, str]:
