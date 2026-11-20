@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, summaryLine, gbifCellUrl, inatCellUrl } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, summaryLine, gbifCellUrl, inatCellUrl, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -44,7 +44,8 @@ test('classify: outside, gap, confirmed at native bins', () => {
   assert.equal(r.total, 21);
   assert.ok(Math.abs(r.outsidePct - (100 * 16) / 21) < 1e-9);
   assert.ok(Math.abs(r.gapPct - (100 * 24) / 25) < 1e-9);
-  assert.equal(summaryLine(r), '76% of records fall outside this range; 96% of the range has no records');
+  assert.equal(summaryLine(r), '76% of records fall outside this range; 96% of the range has no records.');
+  assert.match(summaryLine(r, 'USGS GAP'), /^vs USGS GAP: 76%/);
 });
 
 test('outsideMin hides stray bins from the map but not from the summary', () => {
@@ -65,4 +66,21 @@ test('area links', () => {
   const c = { w: -80, s: 40, e: -75, n: 45 };
   assert.match(inatCellUrl('Lithobates sylvaticus', c), /taxon_name=Lithobates%20sylvaticus&swlat=40&swlng=-80&nelat=45&nelng=-75/);
   assert.match(gbifCellUrl(2427072, c), /taxon_key=2427072&geometry=POLYGON/);
+});
+
+test('coverage: bins outside it are unmapped and not counted', () => {
+  const counts = new Map([[key(1, 89), 5], [key(21, 89), 15], [key(-21, 89), 40]]);
+  const r = classify(counts, range, 2, { coverage: fc(sq(-10, 80, 30, 90)) });
+  assert.equal(r.unmapped, 40);
+  assert.equal(r.total, 20);
+  assert.ok(Math.abs(r.outsidePct - 75) < 1e-9);
+  assert.deepEqual(r.cells.filter(c => c.status === 'unmapped').map(c => c.count), [40]);
+  assert.ok(!r.cells.some(c => c.status === 'outside' && c.count === 40));
+  assert.match(summaryLine(r, 'USGS GAP', 'conterminous US'), /Compared within the source's coverage \(conterminous US\)/);
+});
+
+test('CONUS coverage excludes Ontario and Ottawa but keeps Chicago and Ohio', () => {
+  const t = inside(CONUS);
+  assert.ok(!t(-80, 46.5) && !t(-75.7, 45.4));
+  assert.ok(t(-87.6, 41.9) && t(-83, 40) && t(-93, 46));
 });
