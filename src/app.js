@@ -521,3 +521,5 @@ $('share').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(location.href); say('Link copied. It opens this species with the same layers and view.'); }
   catch { say(`Copy this link: ${location.href}`); }
 });
+// A drag pans the map instead of drawing; say how freehand tools work so the gesture doesn't fail silently.
+map.on('dragend', () => { if (draw?.mode() === 'freehand') say('Dragging moves the map. To draw, click once to start, move the pointer, then click again to finish.'); });
