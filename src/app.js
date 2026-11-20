@@ -71,7 +71,8 @@ const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => sync
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
-$('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
+$('open-propose').addEventListener('click', () => { if ($('propose-form').hidden) $('author').removeAttribute('aria-invalid'); openPropose($('propose-form').hidden); });
+$('author').addEventListener('blur', e => { if (!e.target.value.trim()) e.target.setAttribute('aria-invalid', 'true'); }); // error only after the user leaves it empty or submits
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
 syncTools();
 for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => setTool(m));
