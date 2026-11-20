@@ -1,5 +1,6 @@
 // Contributors view and per-taxon expertise, from data/experts.json (public track record).
 import { byAuthor, parentOf } from './lineage.js';
+import { REPO } from './api.js';
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 const num = n => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(n ?? 0));
 const ORCID = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/, INAT = /^[A-Za-z0-9_-]{3,40}$/;
@@ -24,6 +25,27 @@ export function expertiseLine(expert, taxonKey) {
   const bits = [`${num(t.inat_rg_obs_species)} research-grade iNat obs of this species`, `${num(t.inat_ids_species)} IDs`, `${num(t.papers_on_taxon)} papers on this taxon`];
   if (t.inat_rg_obs_order) bits.push(`${num(t.inat_rg_obs_order)} obs in its order`);
   return el('div', { className: 'muted expert' }, bits.join(' · '), ' · ', ...ids(expert));
+}
+
+// Open pull requests that touch data/ranges/, as [{ login, url, number }]: contributors whose range awaits review. Public GitHub API, first `max` PRs; any failure yields what was found so far.
+export async function pendingContributors(max = 10, get = fetch) {
+  const api = `https://api.github.com/repos/${REPO}/pulls`, out = [];
+  try {
+    const prs = await (await get(`${api}?state=open&per_page=${max}`)).json();
+    if (!Array.isArray(prs)) return out;
+    await Promise.all(prs.slice(0, max).map(async pr => {
+      try {
+        const files = await (await get(`${api}/${pr.number}/files?per_page=100`)).json();
+        if (Array.isArray(files) && files.some(f => f.filename?.startsWith('data/ranges/'))) out.push({ login: pr.user?.login, url: pr.html_url, number: pr.number });
+      } catch { /* rate limited or offline: skip this PR */ }
+    }));
+  } catch { /* GitHub unreachable: no pending list */ }
+  return out.filter(p => p.login).sort((a, b) => a.number - b.number);
+}
+
+export function renderPending(el, pending) {
+  el.hidden = !pending.length;
+  el.replaceChildren('Pending review: ', ...pending.flatMap((p, i) => [i ? ', ' : '', link(p.url, `${p.login} (#${p.number})`)]));
 }
 
 export function renderBoard(experts, { table, empty, ranges = [] }) {

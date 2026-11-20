@@ -25,6 +25,7 @@ export function initRelayUi({ $, say, state, patch, current, openPropose, draw, 
     const s = relay.session();
     $('relay-who').textContent = s ? `Signed in as ${s.name} (${s.provider}${s.verified ? ', verified' : ', unverified'}).` : 'Sign in to submit without a GitHub account.';
     $('relay-submit').hidden = !s;
+    $('author-field').hidden = $('me').hidden = !!s; // the session supplies the identity
     $('relay-buttons').replaceChildren(...enabled.filter(p => p !== 'email').map(p => {
       const b = Object.assign(document.createElement('button'), { type: 'button', textContent: `${s ? 'Switch to' : 'Sign in with'} ${relay.LABELS[p]}` });
       b.addEventListener('click', () => { stashDraft(); location.href = relay.signInUrl(p); });

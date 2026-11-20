@@ -1,10 +1,10 @@
 import { speciesName, occurrenceTiles, loadIndex, loadExperts, loadRange, REPO, RELAY_URL } from './api.js';
 import { initSearch } from './search.js';
-import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } from './export.js';
+import { buildCollection, download, proposeUrl } from './export.js';
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
 import { initDraw, polygonsOf, DRAFT } from './draw.js';
-import { renderBoard, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
+import { renderBoard, pendingContributors, renderPending, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
 import { buildHash, parseHash } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
@@ -18,6 +18,8 @@ import { initHistory } from './history-ui.js';
 import { initSteps } from './steps.js';
 import { initSaved } from './saved.js';
 import { initRelayUi } from './relay-ui.js';
+import { session as relaySession } from './relay.js';
+import { readWho } from './who.js';
 import { initPatch } from './patch-ui.js';
 import { initUndoUi } from './undo-ui.js';
 import { initInat } from './inat-ui.js';
@@ -301,13 +303,9 @@ function current(needName = false) {
   if (!state.taxon) { say('Select a species first.'); return null; }
   const features = draw?.all() ?? [];
   if (!features.length && !state.patch?.shapes.length) { say('Draw at least one polygon first.'); return null; }
-  const author = $('author').value.trim();
-  if (needName && !author) { say('Enter a display name.'); $('author').setAttribute('aria-invalid', 'true'); openPropose(true); $('author').focus(); return null; }
-  const github = $('github').value.trim();
-  if (github && !GITHUB_RE.test(github)) { say('GitHub username: letters, digits, hyphens, up to 39.'); $('github').focus(); return null; }
-  const orcid = $('orcid').value.trim(), inat = $('inat').value.trim();
-  if (orcid && !ORCID_RE.test(orcid)) { say('ORCID must look like 0000-0002-1825-0097.'); $('orcid').focus(); return null; }
-  if (inat && !INAT_RE.test(inat)) { say('iNaturalist username: letters, digits, _ or -.'); $('inat').focus(); return null; }
+  const who = readWho($, RELAY_URL ? relaySession() : null, needName);
+  if (who.err) { say(who.err); if (who.field === 'author') { $('author').setAttribute('aria-invalid', 'true'); openPropose(true); } $(who.field).focus(); return null; }
+  const { author, github, orcid, inat } = who;
   const message = $('change-msg').value.trim();
   if (needName && (state.copy || state.patch) && !message) { say('Say what changed and why.'); $('change-msg').focus(); return null; }
   const meta = { message, taxonKey: state.taxon.key, scientificName: state.taxon.name, author, github, orcid, inat, sources: $('sources').value.trim(), derived: state.copy?.derived };
@@ -337,6 +335,8 @@ async function showBoard() {
   state.experts ??= await loadExperts();
   state.index ??= await loadIndex();
   renderBoard(state.experts, { table: $('board'), empty: $('board-empty'), ranges: state.index });
+  state.pending ??= pendingContributors();
+  renderPending($('board-pending'), await state.pending);
 }
 
 // ---- official outline + SDM ----
