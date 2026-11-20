@@ -10,7 +10,7 @@ test('required attributes and defaults', () => {
   assert.equal(fc.features.length, 2);
   assert.deepEqual(fc.features[0].properties, {
     ID_NO: '', SCI_NAME: 'Danaus plexippus', PRESENCE: 1, ORIGIN: 1, SEASONAL: 1, COMPILER: 'A. Person', YEAR: 2026,
-    CITATION: 'RangeCraft community range, https://x/#taxon=1', SOURCE: 'field notes', DIST_COMM: fc.features[0].properties.DIST_COMM,
+    CITATION: 'RangeCraft community range, https://x/#taxon=1', SOURCE: 'field notes', DIST_COMM: 'Map status: Incomplete. field notes',
   });
   assert.deepEqual(fc.features[0].geometry, geom);
 });
@@ -38,4 +38,19 @@ test('missing name, blank compiler and source, default year', () => {
   assert.equal(p.SOURCE, '');
   assert.equal(p.YEAR, new Date().getFullYear());
   assert.equal(iucnFilename('Danaus plexippus', 2026), 'danaus-plexippus-iucn-2026.geojson');
+});
+
+test('DIST_COMM carries map status then sources; bad status throws', () => {
+  const dc = o => buildIucn([{ geometry: geom }], { ...m, ...o }).features[0].properties.DIST_COMM;
+  assert.equal(dc({ mapStatus: 'Done' }), 'Map status: Done. field notes');
+  assert.equal(dc({ mapStatus: 'Not possible', source: '' }), 'Map status: Not possible.');
+  assert.throws(() => dc({ mapStatus: 'Finished' }), /Map status/);
+  assert.equal(dc({ countries: ['CA', 'US'] }), 'Map status: Incomplete. Countries: CA, US. field notes');
+  assert.equal(dc({ countries: [], source: '' }), 'Map status: Incomplete.');
+});
+
+test('per-feature codes override the defaults; invalid feature codes throw', () => {
+  const ps = buildIucn([{ geometry: geom, properties: { PRESENCE: '3' } }, { geometry: geom }], { ...m, presence: 2, origin: 4 }).features.map(f => f.properties);
+  assert.deepEqual(ps.map(p => [p.PRESENCE, p.ORIGIN]), [[3, 4], [2, 4]]);
+  assert.throws(() => buildIucn([{ geometry: geom, properties: { ORIGIN: 9 } }], m), /ORIGIN/);
 });

@@ -28,6 +28,7 @@ export function expertiseLine(expert, taxonKey) {
 export function renderBoard(experts, { table, empty }) {
   const rows = [...experts].sort((a, b) => (b.works_total || 0) - (a.works_total || 0));
   empty.hidden = rows.length > 0;
+  empty.querySelector('button').onclick = () => document.getElementById('tab-map').click();
   table.hidden = !rows.length;
   table.tBodies[0].replaceChildren(...rows.map(e => el('tr', {},
     el('td', { textContent: e.display || shownName(e.author) }),
@@ -36,3 +37,13 @@ export function renderBoard(experts, { table, empty }) {
     el('td', { textContent: e.h_index ?? '-' }),
     el('td', { textContent: Object.keys(e.taxa || {}).length }))));
 }
+
+export const fmtScore = (s, r) => {
+  if (!s) return 'not yet scored';
+  const bits = [];
+  if (s.window_all) bits.push(`${Math.round((s.inside_all / s.window_all) * 100)}% of all nearby GBIF records inside`);
+  bits.push(s.window_post ? `${s.inside_post}/${s.window_post} records since edit inside` : 'no records since edit yet');
+  if (s.skill != null) bits.push(`skill ${Number(s.skill).toFixed(2)} (new records inside vs expected by chance)`);
+  if (r.edit_date) bits.push(`added ${r.edit_date}${r.identity === 'source' && r.created && r.created !== r.edit_date ? ` (source ${r.created})` : ''}`);
+  return bits.join(', ');
+};

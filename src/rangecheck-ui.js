@@ -2,15 +2,17 @@
 import { loadRange, densityTile } from './api.js';
 import * as rc from './rangecheck.js';
 import { sdmRawBox } from './official.js';
+import { fetchCites, addLines } from './cite.js';
 
 const $ = id => document.getElementById(id);
+const filter = () => $('rc-filter').value;
 
 // state: { taxon, official }. Returns { clear, legend }; clear() resets the toggle and layer (call on taxon change).
-export function initRangeCheck({ map, state, onChange, drawing, draft = () => [] }) {
-  const PLAIN = { outside: 'records outside range (range may be too small, or misIDs)', gap: 'no records yet (check effort or habitat)', unmapped: 'not mapped by this source' };
-  const HABITAT = { outside: 'outside range, suitable, with records: range likely too small', outsideLow: 'outside range, low suitability, with records: check IDs or the model',
-    gap: 'in range, suitable, no records yet (check effort)', lowgap: 'in range, low suitability (check the range edge)', survey: 'outside range, suitable, no records: worth surveying', unmapped: PLAIN.unmapped };
-  let LABELS = PLAIN, present = new Set(), threshold = null, targets = '';
+export function initRangeCheck({ map, state, onChange, drawing, draft = () => [], say = () => {} }) {
+  const PLAIN = { outside: 'Records outside your range: range may be too small (or misIDs)', gap: 'Inside your range, no records yet (check effort or habitat)', unmapped: 'Not mapped by this source' };
+  const HABITAT = { outside: 'Records outside your range, good habitat: range likely too small', outsideLow: 'Records outside your range, poor habitat: check IDs or the model',
+    gap: 'Inside your range, good habitat, no records yet (check effort)', lowgap: 'Inside your range, poor habitat (check the range edge)', survey: 'Good habitat outside, unsurveyed', unmapped: PLAIN.unmapped };
+  let pts = [], LABELS = PLAIN, present = new Set(), threshold = null, targets = '';
   // Samples the raw habitat model over the box in one request; null when it cannot be read.
   async function loadSuit(slug, box) {
     try {
@@ -27,7 +29,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   // Fade the GBIF heat map while checking so red outside-range bins stay distinct from dense occurrences.
   const dimOcc = on => map.getLayer('occ') && map.setPaintProperty('occ', 'raster-opacity', on ? 0.35 : 1);
   function clear(msg = '') {
-    rcRun++;
+    rcRun++; pts = [];
     for (const id of LAYERS) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource('rc')) map.removeSource('rc');
     $('rc-toggle').checked = false;
@@ -48,8 +50,8 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     const covered = fcs.length > 0 && fcs.every(fc => fc.properties?.coverage);
     return { fc: { type: 'FeatureCollection', features: fcs.flatMap(fc => fc.features ?? []) }, ref: [...new Set(boxes.map(b => b.dataset.author))].join(' + '), coverage: covered ? rc.CONUS : null };
   }
-  async function runRangeCheck() {
-    const run = ++rcRun, taxon = state.taxon;
+  async function runRangeCheck(scroll = false) {
+    const run = ++rcRun, taxon = state.taxon, mode = filter();
     const stale = () => run !== rcRun || state.taxon !== taxon;
     try {
       const { fc, ref, coverage } = await reference();
@@ -61,7 +63,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       await Promise.all(Array.from({ length: 4 }, async () => {
         while (next < tiles.length && !stale()) {
           const t = tiles[next++];
-          rc.addTile(counts, t, await densityTile(taxon.key, t));
+          rc.addTile(counts, t, await densityTile(taxon.key, t, undefined, mode));
           if (!stale()) $('rc-summary').textContent = `Counting GBIF records... ${Math.round((100 * ++done) / tiles.length)}%`;
         }
       }));
@@ -72,7 +74,9 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         suit = await loadSuit(state.official.slug, rc.tilesBox(tiles, size)); why = suit ? 'ok' : 'unreadable';
         if (stale()) return;
       }
-      const res = rc.classify(counts, fc, size, { coverage, suit });
+      const res = rc.classify(counts, fc, size, { coverage, suit }), inRange = rc.inside(fc);
+      // Bin centres (not records) inside the range: GBIF bins are coarse, so the AOO built from them is a screening lower bound.
+      pts = [...counts].filter(([, n]) => n > 0).map(([k]) => rc.centre(...k.split(',').map(Number), size)).filter(c => inRange(...c));
       threshold = res.threshold; LABELS = threshold == null ? PLAIN : HABITAT;
       present = new Set(res.cells.map(c => c.status));
       hasUnmapped = res.unmapped > 0;
@@ -87,11 +91,12 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
       const covered = coverage && 'conterminous US', sum = $('rc-summary'), list = document.createElement('ul');
       list.replaceChildren(...rc.summaryItems(res).map(t => Object.assign(document.createElement('li'), { textContent: t })));
-      sum.replaceChildren(Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, ref) }), list);
+      sum.replaceChildren(Object.assign(document.createElement('em'), { textContent: 'Rough guide: gaps often mean nobody has looked there yet.' }), document.createElement('br'), Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, [ref, rc.RECORD_NOTE[mode] && `based on ${rc.RECORD_NOTE[mode]}`].filter(Boolean).join(', ')) }), list);
       sum.title = rc.summaryTip(res, covered, why);
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
       onChange();
+      if (scroll) { sum.style.scrollMarginTop = '4.5rem'; sum.scrollIntoView({ block: 'start' }); } // below the sticky step bar, clear of the sticky propose card at the bottom
     } catch (e) { if (!stale()) clear(`Range check failed: ${e.message}`); }
   }
   $('rc-targets').addEventListener('click', () => {
@@ -101,11 +106,12 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     a.click();
     URL.revokeObjectURL(a.href);
   });
-  $('rc-toggle').addEventListener('change', e => { if (e.target.checked) { dimOcc(true); runRangeCheck(); } else clear(); });
+  $('rc-toggle').addEventListener('change', e => { if (e.target.checked) { dimOcc(true); runRangeCheck(true); } else clear(); });
   // Re-run when the compared layer changes (official toggle, ticks, drawing); debounced because drawing fires many changes.
   let timer;
   const refresh = () => { if ($('rc-toggle').checked) { clearTimeout(timer); timer = setTimeout(runRangeCheck, 500); } };
   $('versions').addEventListener('change', refresh);
+  $('rc-filter').addEventListener('change', refresh);
   const hatch = () => {
     const c = Object.assign(document.createElement('canvas'), { width: 8, height: 8 }), g = c.getContext('2d');
     g.strokeStyle = '#8a8a8a'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(0, 8); g.lineTo(8, 0); g.moveTo(-1, 1); g.lineTo(1, -1); g.moveTo(7, 9); g.lineTo(9, 7); g.stroke();
@@ -123,9 +129,20 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     }
     if (p.status === 'outside' || p.status === 'outsideLow')
       el.append(Object.assign(document.createElement('a'), { href: rc.inatIdentifyUrl(state.taxon.name, p), textContent: 'Help verify these IDs on iNaturalist', target: '_blank', rel: 'noopener' }));
+    if (p.count > 0) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cite records here', className: 'linkbtn' });
+      b.addEventListener('click', async () => {
+        try {
+          const { text, added } = addLines($('sources').value, await fetchCites(state.taxon.key, p, undefined, filter()));
+          $('sources').value = text;
+          say(added ? `Added ${added} record${added === 1 ? '' : 's'} to Sources.` : 'No new records to add.');
+        } catch (e) { say(`Could not fetch records: ${e.message}`); }
+      });
+      el.append(b);
+    }
     new maplibregl.Popup().setLngLat(e.lngLat).setDOMContent(el).addTo(map);
   });
-  const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range bins with records reach.`;
+  const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range grid cells with records reach.`;
   const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => threshold == null ? k !== 'unmapped' || hasUnmapped : present.has(k)).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k], ...(threshold != null && k !== 'unmapped' && { title: tip() }) })) : [];
-  return { clear, legend, refresh };
+  return { clear, legend, refresh, points: () => pts };
 }

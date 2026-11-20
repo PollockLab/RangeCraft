@@ -48,7 +48,7 @@ export function pickZoom(box, { maxTiles = 64, maxCells = 40000 } = {}) {
 }
 
 // Bin index of a longitude/latitude; bin (i, j) is centred at (-180 + (i + .5) size, 90 - (j + .5) size).
-const centre = (i, j, size) => [-180 + (i + 0.5) * size, 90 - (j + 0.5) * size];
+export const centre = (i, j, size) => [-180 + (i + 0.5) * size, 90 - (j + 0.5) * size];
 
 // Adds the squares of one tile (centres in 4096 tile units) into counts, a Map "i,j" -> records.
 export function addTile(counts, tile, squares) {
@@ -62,12 +62,13 @@ export function addTile(counts, tile, squares) {
 // Each bin is its own cell. Outside: has records, centre not in range (drawn when count >= outsideMin).
 // Gap: centre in range, no records. Confirmed (counted, not drawn): centre in range, with records.
 // With coverage (a polygon FeatureCollection) bins centred outside it are 'unmapped': neutral cells, left out of every percentage.
-// With suit (lon, lat) => 0..100 | null, the threshold is the score 90% of in-range bins with records reach; bins below it (or null) are low suitability:
+// With suit (lon, lat) => 0..100 | null, the threshold is the score 90% of in-range grid cells with records reach; bins below it (or null) are low suitability:
 // in-range gaps split into gap / lowgap, outside bins into outside / outsideLow, and suitable record-free bins one ring from the range become 'survey'.
 // Without suit, or without any in-range record to set a threshold, nothing is split and threshold is null.
 export function classify(counts, fc, size, { outsideMin = 1, coverage = null, suit = null } = {}) {
   const test = inside(fc), box = bbox(fc), cells = [], covered = coverage && inside(coverage), outs = [], vals = [], seen = new Map();
   const rin = (i, j) => { const k = `${i},${j}`; if (!seen.has(k)) seen.set(k, test(...centre(i, j, size))); return seen.get(k); };
+  const inRange = [];
   let total = 0, outRecords = 0, lowRecords = 0, confirmed = 0, gaps = 0, unmapped = 0;
   for (const [k, count] of counts) {
     const [i, j] = k.split(',').map(Number), [x, y] = centre(i, j, size);
@@ -75,7 +76,7 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       unmapped += count; cells.push({ status: 'unmapped', count, ...cellBox(i, j, size) }); continue;
     }
     total += count;
-    if (rin(i, j)) { confirmed++; if (suit) { const v = suit(x, y); if (v != null) vals.push(v); } }
+    if (rin(i, j)) { confirmed++; let v = null; if (suit) { v = suit(x, y); if (v != null) vals.push(v); } inRange.push([v, cellArea(cellBox(i, j, size))]); }
     else { outRecords += count; if (count >= outsideMin) outs.push({ i, j, x, y, count }); }
   }
   vals.sort((a, b) => a - b);
@@ -90,8 +91,9 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
   for (let j = j0; j <= j1; j++)
     for (let i = i0; i <= i1; i++) {
       if (counts.has(`${i},${j}`) || !rin(i, j)) continue;
-      const [x, y] = centre(i, j, size), good = ok(x, y);
+      const [x, y] = centre(i, j, size); if (covered && !covered(x, y)) continue; const good = ok(x, y);
       gaps++; if (!good) lowGaps++;
+      inRange.push([threshold == null ? null : suit(x, y), cellArea(cellBox(i, j, size))]);
       cells.push({ status: good ? 'gap' : 'lowgap', count: 0, score: threshold == null ? null : suit(x, y), ...cellBox(i, j, size) });
     }
   if (threshold != null) for (let j = j0 - 1; j <= j1 + 1; j++) // one bin ring around the range: suitable, no records, a neighbour inside
@@ -101,15 +103,18 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       if ((covered && !covered(x, y)) || !ok(x, y) || ![-1, 0, 1].some(dj => [-1, 0, 1].some(di => (di || dj) && rin(i + di, j + dj)))) continue;
       survey++; cells.push({ status: 'survey', count: 0, score: suit(x, y), ...cellBox(i, j, size) });
     }
-  return { cells, total, unmapped, confirmed, gaps, lowGaps, survey, lowRecords, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
+  const rangeKm2 = inRange.reduce((a, [, m]) => a + m, 0), aohKm2 = threshold == null ? null : inRange.reduce((a, [v, m]) => a + (v != null && v >= threshold ? m : 0), 0);
+  return { cells, aohKm2, rangeKm2, total, unmapped, confirmed, gaps, lowGaps, survey, lowRecords, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
 }
+// Area in km2 of a w/s/e/n cell on a sphere of mean Earth radius.
+export const cellArea = ({ w, s, e, n }) => 6371.0088 ** 2 * ((e - w) * Math.PI / 180) * (Math.sin(n * Math.PI / 180) - Math.sin(s * Math.PI / 180));
 const cellBox = (i, j, size) => ({ w: -180 + i * size, s: 90 - (j + 1) * size, e: -180 + (i + 1) * size, n: 90 - j * size });
 
 // Raw SDM scores are 0-100 and uncalibrated across species, hence the per-species threshold. why: 'none' (no model), 'unreadable', or 'ok'.
 export const sdmNote = (r, why) => why === 'none' ? 'No habitat model for this species, so gaps are not habitat-checked.'
   : why === 'unreadable' ? 'The habitat model could not be read, so gaps are not habitat-checked.'
-  : r.threshold == null ? 'No in-range bin has records, so no habitat threshold could be set and gaps are not habitat-checked.'
-  : `Suitable means a habitat score of at least ${r.threshold}, which 90% of in-range bins with records reach.`;
+  : r.threshold == null ? 'No in-range grid cell has records, so no habitat threshold could be set and gaps are not habitat-checked.'
+  : `Suitable means a habitat score of at least ${r.threshold}, which 90% of in-range grid cells with records reach.`;
 
 // Score at lon/lat from a decoded RGBA image of box [w, s, e, n] (equirectangular, width px wide); null outside it or on nodata (alpha 0).
 export function sampler(box, width, data) {
@@ -135,6 +140,11 @@ export const bin = n => {
   return `over ${b.toLocaleString('en-US')}`;
 };
 
+// GBIF query suffix for the records filter (map tiles and occurrence search take the same params).
+export const recordParams = (mode, year = new Date().getFullYear()) =>
+  mode === 'since2000' ? `&year=2000,${year}` : mode === 'specimens' ? '&basisOfRecord=PRESERVED_SPECIMEN' : '';
+export const RECORD_NOTE = { since2000: 'records since 2000 only', specimens: 'specimens only' };
+
 // One bold verdict from the share of records outside the range; ref names what was compared ("official outline", "your draft").
 export const verdict = (r, ref) => {
   const vs = ref ? ` (vs ${ref})` : '';
@@ -146,15 +156,16 @@ export const verdict = (r, ref) => {
 export const summaryItems = r => !r.total ? [] : [
   `${Math.round(r.outsidePct)}% of records fall outside this range`,
   `${Math.round(r.gapPct)}% of the range has no records yet`,
-  r.threshold != null && r.survey && `${r.survey} bin${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records: worth surveying`,
+  r.aohKm2 != null && r.rangeKm2 > 0 && `Area of habitat (screening): about ${Math.round(r.aohKm2).toLocaleString('en-US')} km² of your range is in cells the habitat model rates suitable (${Math.round(100 * r.aohKm2 / r.rangeKm2)}% of the range)`,
+  r.threshold != null && r.survey && `${r.survey} grid cell${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records: worth surveying`,
   r.threshold != null && r.lowRecords && `${bin(r.lowRecords)} record${r.lowRecords === 1 ? '' : 's'} outside the range in low-suitability habitat: worth an ID check`,
 ].filter(Boolean);
 
-// Tooltip with the details: threshold, coverage, low-suitability bins.
+// Tooltip with the details: threshold, coverage, low-suitability grid cells.
 export const summaryTip = (r, covered, why) => [
   sdmNote(r, why),
-  r.threshold != null && r.lowGaps && `${r.lowGaps} in-range bin${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`,
-  covered && `Compared within the source's coverage (${covered}); bins outside it are not mapped by this source.`,
+  r.threshold != null && r.lowGaps && `${r.lowGaps} in-range grid cell${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`,
+  covered && `Compared within the source's coverage (${covered}); grid cells outside it are not mapped by this source.`,
 ].filter(Boolean).join(' ');
 
 const csvCell = v => /[",\n]/.test(v = String(v)) ? `"${v.replace(/"/g, '""')}"` : v;
