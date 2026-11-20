@@ -10,7 +10,7 @@ import { applyPatch } from './patch.js';
 const SRC = 'history-diff', LAYERS = [['history-add', '#2a9d3f', 'add'], ['history-rem', '#d62828', 'rem']];
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-export function initHistory({ map, state, say }) {
+export function initHistory({ map, state, say, edit }) {
   let open = null; // { panel, button }
 
   function clearOverlay() {
@@ -41,14 +41,14 @@ export function initHistory({ map, state, say }) {
     // An unmessaged root is the first upload: its sources are a citation, not a change message, so they go in the tooltip.
     const head = pr.message ? `Revision by ${shownName(r.author)}, ${r.created}: '${pr.message.length > 140 ? `${pr.message.slice(0, 139)}…` : pr.message}'. ` : `${edit ? 'Revision' : 'Initial range'} by ${shownName(r.author)}, ${r.created}. `;
     const b = el('button', { type: 'button', className: 'rev', title: pr.message || src }, head, el('span', { className: 'muted', textContent: edit ? changeText(d) : '' }));
-    b.addEventListener('click', () => { overlay(d); onPick(b); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); });
+    b.addEventListener('click', () => { overlay(d); onPick(b, r); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); });
     return b;
   }
 
   async function fill(panel, r) {
     const graph = buildGraph(state.index.filter(x => String(x.taxonKey) === state.taxon.key)), node = graph.get(r.id);
     if (!node) return;
-    const pick = b => { for (const x of panel.querySelectorAll('.rev')) x.setAttribute('aria-pressed', x === b); };
+    const pick = (b, rr) => { for (const x of panel.querySelectorAll('.rev')) x.setAttribute('aria-pressed', x === b); const e = panel.querySelector('.hist-edit'); e.hidden = false; e.onclick = () => edit(rr); };
     const list = (nodes, label) => nodes.length ? [el('div', { className: 'muted', textContent: label }), ...nodes] : [];
     const settle = async ns => (await Promise.allSettled(ns.map(n => revision(n, pick)))).map((s, i) => s.status === 'fulfilled' ? el('div', {}, s.value) : el('div', { className: 'muted', textContent: `${ns[i].range.id}: ${s.reason.message}` }));
     const [rev, forks] = await Promise.all([settle(log(graph, r.id)), settle(node.children)]);
@@ -67,7 +67,8 @@ export function initHistory({ map, state, say }) {
       const close = el('button', { type: 'button', textContent: 'Close' });
       close.addEventListener('click', clear);
       const git = el('a', { href: `https://github.com/${REPO}/commits/main/${r.file}`, target: '_blank', rel: 'noopener', textContent: 'View in git' });
-      const panel = el('div', { className: 'hist-panel' }, el('div', { className: 'hist-body muted', textContent: 'Loading...' }), el('div', {}, git, ' ', close));
+      const ed = el('button', { type: 'button', className: 'hist-edit', hidden: true, textContent: 'Edit from this revision', title: 'Start a new revision from this one. Later revisions are kept.' });
+      const panel = el('div', { className: 'hist-panel' }, el('div', { className: 'hist-body muted', textContent: 'Loading...' }), el('div', {}, ed, ' ', git, ' ', close));
       b.closest('li').append(panel);
       b.setAttribute('aria-expanded', true);
       open = { panel, button: b };

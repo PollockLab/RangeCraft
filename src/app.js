@@ -10,6 +10,7 @@ import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
 import { initIucnUi } from './iucn-ui.js';
 import { initRangeCheck } from './rangecheck-ui.js';
+import { outsideLine } from './rangecheck.js';
 import { initReshape } from './reshape-ui.js';
 import { initEoo } from './eoo-ui.js';
 import { initCopy } from './copy.js';
@@ -66,7 +67,7 @@ const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
-const lineage = initHistory({ map, state, say });
+const lineage = initHistory({ map, state, say, edit: r => editRange(r) });
 const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial() });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
@@ -234,10 +235,7 @@ async function showVersions(fit = true) {
     sc.textContent = fmtScore(r.score, r);
     const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit', title: 'Edit this range. Your version is saved as a new revision linked to this one; the original stays.' });
     cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
-    edit.addEventListener('click', async () => {
-      try { if (r.basis === 'official-patch' ? await patch.edit(r) : (patch.exit(), await copyRange(r), true)) say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
-      catch (e) { say(e.message); }
-    });
+    edit.addEventListener('click', () => editRange(r));
     const check = Object.assign(document.createElement('span'), { className: 'check' });
     check.append(cb, lab);
     row.append(check, edit, lineage.button(r), tgl);
@@ -245,6 +243,8 @@ async function showVersions(fit = true) {
     const ex = expertiseLine(findExpert(state.experts, r.author), state.taxon.key);
     if (ex) more.append(ex);
     li.append(row);
+    const rec = recordsLine(r, cb);
+    if (rec) li.append(rec);
     loadRange(r.file).then(fc => {
       if (fc.properties?.coverage) li.append(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
     }).catch(() => {}).finally(() => li.append(more));
@@ -252,6 +252,26 @@ async function showVersions(fit = true) {
   }));
   rs.forEach((r, i) => toggleRange(r, COLORS[i % COLORS.length], true).catch(e => say(e.message)));
   if (fit) fitRanges(rs);
+}
+
+// Load a range (or a past revision of one) into the editor; the new file's parent is that range.
+async function editRange(r) {
+  try { if (r.basis === 'official-patch' ? await patch.edit(r) : (patch.exit(), await copyRange(r), true)) say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
+  catch (e) { say(e.message); }
+}
+// Muted line under a range row: how many GBIF grid cells with records fall outside it. Fetches only when clicked.
+function recordsLine(r, cb) {
+  if (r.basis === 'official-patch') return null; // a patch file holds only its shapes, not the whole range
+  const line = Object.assign(document.createElement('div'), { className: 'muted' }), go = Object.assign(document.createElement('button'), { type: 'button', className: 'linkbtn', textContent: 'Check records', title: 'Count GBIF grid cells with records that fall outside this range' });
+  const show = Object.assign(document.createElement('button'), { type: 'button', className: 'linkbtn', textContent: 'Show', title: 'Run the range check against this range only' });
+  show.addEventListener('click', () => { for (const x of document.querySelectorAll('#versions input')) { x.checked = x === cb; x.dispatchEvent(new Event('change', { bubbles: true })); } if (!$('rc-toggle').checked) $('rc-toggle').click(); });
+  go.addEventListener('click', async () => {
+    go.disabled = true; line.replaceChildren('Counting GBIF records...');
+    try { const n = await rangeCheck.outsideCount(await loadRange(r.file)); line.replaceChildren(outsideLine(n), ...(n ? [' ', show] : [])); }
+    catch (e) { line.replaceChildren(`Could not check records: ${e.message}`); go.disabled = false; line.append(' ', go); }
+  });
+  line.append(go);
+  return line;
 }
 
 // ---- export / propose ----
