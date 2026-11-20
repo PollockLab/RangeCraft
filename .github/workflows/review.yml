@@ -1,0 +1,30 @@
+name: review
+# Posts one comment per range PR mapping what it adds and removes. pull_request_target so fork PRs
+# get a comment too: it checks out the base branch and reads the PR's range files as data only.
+on:
+  pull_request_target:
+    paths: ["data/ranges/**"]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - run: uv sync
+      - run: git fetch origin "pull/${{ github.event.pull_request.number }}/head:pr"
+      - run: uv run python scripts/review.py "origin/${{ github.base_ref }}" pr review.md
+      - name: Post or update the review comment
+        if: hashFiles('review.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- rangecraft-review -->"))) | .id' | head -1)
+          if [ -n "$id" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@review.md >/dev/null
+          else gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file review.md; fi
