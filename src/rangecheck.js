@@ -89,14 +89,14 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       if (counts.has(`${i},${j}`) || !rin(i, j)) continue;
       const [x, y] = centre(i, j, size), good = ok(x, y);
       gaps++; if (!good) lowGaps++;
-      cells.push({ status: good ? 'gap' : 'lowgap', count: 0, ...cellBox(i, j, size) });
+      cells.push({ status: good ? 'gap' : 'lowgap', count: 0, score: threshold == null ? null : suit(x, y), ...cellBox(i, j, size) });
     }
   if (threshold != null) for (let j = j0 - 1; j <= j1 + 1; j++) // one bin ring around the range: suitable, no records, a neighbour inside
     for (let i = i0 - 1; i <= i1 + 1; i++) {
       if (counts.has(`${i},${j}`) || rin(i, j)) continue;
       const [x, y] = centre(i, j, size);
       if ((covered && !covered(x, y)) || !ok(x, y) || ![-1, 0, 1].some(dj => [-1, 0, 1].some(di => (di || dj) && rin(i + di, j + dj)))) continue;
-      survey++; cells.push({ status: 'survey', count: 0, ...cellBox(i, j, size) });
+      survey++; cells.push({ status: 'survey', count: 0, score: suit(x, y), ...cellBox(i, j, size) });
     }
   return { cells, total, unmapped, confirmed, gaps, lowGaps, survey, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
 }
@@ -132,6 +132,19 @@ export const summaryLine = (r, ref, covered) => {
     ? `${lead}${Math.round(r.outsidePct)}% of records fall outside this range; ${Math.round(r.gapPct)}% of the range has no records.`
     : `${lead}No GBIF records with coordinates found around this range.`) + note;
 };
+
+// Habitat-checked extras for the summary; '' when nothing was habitat-checked.
+export const habitatLine = r => r.threshold == null ? '' : [
+  r.survey && `${r.survey} bin${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records.`,
+  r.lowGaps && `${r.lowGaps} in-range bin${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`].filter(Boolean).join(' ');
+
+const csvCell = v => /[",\n]/.test(v = String(v)) ? `"${v.replace(/"/g, '""')}"` : v;
+// CSV of up to `limit` survey (frontier) and suitable-gap bins, best habitat score first. Header only when there are none.
+export function surveyCsv(cells, taxon, limit = 50) {
+  const top = cells.filter(c => (c.status === 'survey' || c.status === 'gap') && c.score != null).sort((a, b) => b.score - a.score).slice(0, limit);
+  return ['rank,kind,lat,lon,suitability,inat_url,gbif_url', ...top.map((c, i) => [i + 1, c.status === 'survey' ? 'frontier' : 'gap',
+    +((c.s + c.n) / 2).toFixed(5), +((c.w + c.e) / 2).toFixed(5), c.score, inatCellUrl(taxon.name, c), gbifCellUrl(taxon.key, c)].map(csvCell).join(','))].join('\n') + '\n';
+}
 
 export const gbifCellUrl = (key, c) =>
   `https://www.gbif.org/occurrence/search?taxon_key=${encodeURIComponent(key)}&geometry=${encodeURIComponent(`POLYGON((${c.w} ${c.s},${c.e} ${c.s},${c.e} ${c.n},${c.w} ${c.n},${c.w} ${c.s}))`)}`;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, summaryLine, gbifCellUrl, inatCellUrl, CONUS } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, summaryLine, habitatLine, surveyCsv, gbifCellUrl, inatCellUrl, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -137,4 +137,22 @@ test('sampler reads gray+alpha pixels of a lon/lat box', () => {
   assert.equal(s(2, 8), 5); assert.equal(s(8, 8), 6); assert.equal(s(2, 2), 7);
   assert.equal(s(8, 2), null); // alpha 0 = nodata
   assert.equal(s(-1, 5), null); assert.equal(s(5, 11), null); // outside the box
+});
+
+test('surveyCsv ranks by score, caps, escapes, and is header-only when empty', () => {
+  const c = (status, score, w) => ({ status, score, count: 0, w, s: 0, e: w + 2, n: 2 });
+  const cells = [c('gap', 50, 0), c('survey', 90, 2), c('lowgap', 99, 4), c('outside', null, 6), c('gap', 70, 8)];
+  const rows = surveyCsv(cells, { name: 'Rana, "x"', key: 1 }).trim().split('\n');
+  assert.equal(rows[0], 'rank,kind,lat,lon,suitability,inat_url,gbif_url');
+  assert.deepEqual(rows.slice(1).map(r => r.split(',').slice(0, 5).join()), ['1,frontier,1,3,90', '2,gap,1,9,70', '3,gap,1,1,50']);
+  assert.match(rows[1], /Rana%2C%20%22x%22/); // url-encoded, so no stray commas or quotes
+  assert.equal(surveyCsv(cells, { name: 'a', key: 1 }, 1).trim().split('\n').length, 2);
+  assert.equal(surveyCsv([], { name: 'a', key: 1 }), 'rank,kind,lat,lon,suitability,inat_url,gbif_url\n');
+});
+
+test('habitatLine counts survey and low bins, empty without a model', () => {
+  assert.equal(habitatLine({ threshold: null, survey: 3, lowGaps: 2 }), '');
+  assert.equal(habitatLine({ threshold: 40, survey: 12, lowGaps: 0 }), '12 bins just outside the range look suitable but have no records.');
+  assert.match(habitatLine({ threshold: 40, survey: 1, lowGaps: 1 }), /^1 bin just outside the range looks suitable but has no records\. 1 in-range bin has low suitability\.$/);
+  assert.equal(habitatLine({ threshold: 40, survey: 0, lowGaps: 0 }), '');
 });
