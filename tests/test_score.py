@@ -384,3 +384,11 @@ def test_git_origin_relay_with_malformed_submitter_falls_back(tmp_path):
 def test_git_origin_relay_keys_on_numeric_id_not_login(tmp_path):
     sub = {"provider": "github", "id": "12345", "login": "alice", "name": "A", "verified": True}
     assert git_origin(_relay_file(tmp_path, sub))[:2] == ("github:12345", "github")
+
+
+def test_inat_base_slug_and_license_kept(tmp_path):
+    d = _fc(basis="official-patch", base="inat-41974-v2-35", derived_from_license="CC-BY-4.0",
+            derived_from="iNaturalist Open Range Maps, taxon 41974, geomodel 2.35")
+    d["features"][0]["properties"] = {"op": "cut"}
+    meta = load_range(_write(tmp_path, d))["meta"]
+    assert meta["base"] == "inat-41974-v2-35" and meta["derived_from_license"] == "CC-BY-4.0"

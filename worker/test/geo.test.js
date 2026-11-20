@@ -97,3 +97,11 @@ test('official patches keep base, message and per-feature op', () => {
   assert.equal(out.features[0].properties.op, 'cut');
   assert.throws(() => buildFile(fc({ basis: 'official-patch' }), S), /requires base/);
 });
+
+test('iNaturalist base slugs and attribution survive the rebuild', () => {
+  const p = fc({ basis: 'official-patch', base: 'inat-41974-v2-35', derived_from: 'iNaturalist Open Range Maps, taxon 41974, geomodel 2.35', derived_from_license: 'CC-BY-4.0' });
+  p.features[0].properties = { op: 'cut' };
+  const out = buildFile(p, S).properties;
+  assert.equal(out.base, 'inat-41974-v2-35');
+  assert.equal(out.derived_from_license, 'CC-BY-4.0');
+});
