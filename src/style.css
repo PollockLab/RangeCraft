@@ -42,3 +42,12 @@ footer p { margin:.3rem 0; }
   #map { min-height:55vh; flex:none; }
   table { font-size:.85rem; }
 }
+#official { margin:.5rem 0; padding:.5rem; border:1px dashed var(--line); border-radius:6px; }
+#official p { margin:.3rem 0; }
+#official button { margin:.2rem .3rem .2rem 0; }
+#how { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:.5rem .8rem; margin-bottom:.8rem; font-size:.9rem; }
+#how ol { margin:.3rem 0 .3rem 1.2rem; padding:0; }
+#how button { float:right; min-height:0; padding:.1rem .5rem; }
+.badge { font-size:.75rem; padding:.05rem .4rem; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+.badge.verified { border-color:var(--accent); color:var(--accent); }
+.expert { grid-column:2; }

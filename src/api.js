@@ -1,5 +1,5 @@
 // Data access: GBIF suggest/tiles and the repo's static JSON files.
-export const REPO = 'PollockLab/RangeCraft';
+export const REPO = 'PollockLab/rangecraft';
 
 export async function suggest(q, signal) {
   const r = await fetch(`https://api.gbif.org/v1/species/suggest?q=${encodeURIComponent(q)}&rank=SPECIES&limit=8`, { signal });
@@ -27,7 +27,7 @@ async function json(path, fallback) {
   } catch { return fallback; }
 }
 export const loadIndex = () => json('data/ranges/index.json', []);
-export const loadLeaderboard = () => json('data/leaderboard.json', []);
+export const loadExperts = () => json('data/experts.json', []);
 export async function loadRange(file) {
   const r = await fetch(file.startsWith('data/') ? file : `data/ranges/${file}`);
   if (!r.ok) throw new Error(`${file}: ${r.status}`);
