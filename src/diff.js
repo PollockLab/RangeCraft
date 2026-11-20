@@ -16,4 +16,5 @@ export function revisionDiff(parentFc, childFc, clip) {
 }
 
 const fmt = n => Math.round(n).toLocaleString('en-US');
-export const changeText = d => `+${fmt(d.addedKm2)} km² added, −${fmt(d.removedKm2)} km² removed.`;
+// Rounded-to-zero halves are dropped, so a pure cut reads "−9,331 km² removed."
+export const changeText = d => [fmt(d.addedKm2) !== '0' && `+${fmt(d.addedKm2)} km² added`, fmt(d.removedKm2) !== '0' && `−${fmt(d.removedKm2)} km² removed`].filter(Boolean).join(', ').replace(/^$/, 'No area change') + '.';
