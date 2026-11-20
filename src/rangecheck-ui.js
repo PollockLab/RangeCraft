@@ -30,6 +30,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     if (map.getSource('rc')) map.removeSource('rc');
     $('rc-toggle').checked = false;
     $('rc-summary').textContent = msg;
+    $('rc-summary').title = '';
     $('rc-targets').hidden = true;
     onChange();
   }
@@ -81,7 +82,10 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         'fill-color': ['match', ['get', 'status'], 'outside', rc.COLORS.outside, 'outsideLow', rc.COLORS.outsideLow, 'lowgap', rc.COLORS.lowgap, 'survey', rc.COLORS.survey, rc.COLORS.gap],
         // red fades for stray records: 1-2 records are faint, 100+ solid
         'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
-      $('rc-summary').textContent = [rc.summaryLine(res, ref, coverage && 'conterminous US'), rc.habitatLine(res), rc.sdmNote(res, why)].filter(Boolean).join(' ');
+      const covered = coverage && 'conterminous US', sum = $('rc-summary'), list = document.createElement('ul');
+      list.replaceChildren(...rc.summaryItems(res).map(t => Object.assign(document.createElement('li'), { textContent: t })));
+      sum.replaceChildren(Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, ref) }), list);
+      sum.title = rc.summaryTip(res, covered, why);
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
       onChange();

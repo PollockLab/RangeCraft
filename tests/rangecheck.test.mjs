@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, summaryLine, habitatLine, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, CONUS } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, bin, verdict, summaryItems, summaryTip, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -44,8 +44,8 @@ test('classify: outside, gap, confirmed at native bins', () => {
   assert.equal(r.total, 21);
   assert.ok(Math.abs(r.outsidePct - (100 * 16) / 21) < 1e-9);
   assert.ok(Math.abs(r.gapPct - (100 * 24) / 25) < 1e-9);
-  assert.equal(summaryLine(r), '76% of records fall outside this range; 96% of the range has no records.');
-  assert.match(summaryLine(r, 'USGS GAP'), /^vs USGS GAP: 76%/);
+  assert.deepEqual(summaryItems(r), ['76% of records fall outside this range', '96% of the range has no records yet']);
+  assert.equal(verdict(r, 'USGS GAP'), 'Many records fall outside this range (vs USGS GAP)');
 });
 
 test('outsideMin hides stray bins from the map but not from the summary', () => {
@@ -59,7 +59,8 @@ test('no records at all', () => {
   const r = classify(new Map(), range, 2);
   assert.equal(r.outsidePct, 0);
   assert.equal(r.gapPct, 100);
-  assert.match(summaryLine(r), /No GBIF records/);
+  assert.match(verdict(r), /No GBIF records/);
+  assert.deepEqual(summaryItems(r), []);
 });
 
 test('area links', () => {
@@ -76,7 +77,7 @@ test('coverage: bins outside it are unmapped and not counted', () => {
   assert.ok(Math.abs(r.outsidePct - 75) < 1e-9);
   assert.deepEqual(r.cells.filter(c => c.status === 'unmapped').map(c => c.count), [40]);
   assert.ok(!r.cells.some(c => c.status === 'outside' && c.count === 40));
-  assert.match(summaryLine(r, 'USGS GAP', 'conterminous US'), /Compared within the source's coverage \(conterminous US\)/);
+  assert.match(summaryTip(r, 'conterminous US', 'none'), /Compared within the source's coverage \(conterminous US\)/);
 });
 
 test('CONUS coverage excludes Ontario and Ottawa but keeps Chicago and Ohio', () => {
@@ -126,6 +127,7 @@ test('nodata bins count as low suitability; sdmNote wording', () => {
   assert.equal(r.threshold, 40);
   assert.equal(r.lowGaps, 20); // the 4 free bins in the scoring column stay suitable
   assert.match(sdmNote(r, 'ok'), /at least 40.*90%/);
+  assert.match(summaryTip(r, null, 'ok'), /at least 40.*90%.*20 in-range bins have low suitability/);
   assert.equal(sdmNote(r, 'none'), 'No habitat model for this species, so gaps are not habitat-checked.');
   assert.match(sdmNote({ threshold: null }, 'ok'), /not habitat-checked/);
 });
@@ -150,11 +152,18 @@ test('surveyCsv ranks by score, caps, escapes, and is header-only when empty', (
   assert.equal(surveyCsv([], { name: 'a', key: 1 }), 'rank,kind,lat,lon,suitability,inat_url,gbif_url\n');
 });
 
-test('habitatLine counts survey and low bins, empty without a model', () => {
-  assert.equal(habitatLine({ threshold: null, survey: 3, lowGaps: 2 }), '');
-  assert.equal(habitatLine({ threshold: 40, survey: 12, lowGaps: 0 }), '12 bins just outside the range look suitable but have no records.');
-  assert.match(habitatLine({ threshold: 40, survey: 1, lowGaps: 1 }), /^1 bin just outside the range looks suitable but has no records\. 1 in-range bin has low suitability\.$/);
-  assert.equal(habitatLine({ threshold: 40, survey: 0, lowGaps: 0 }), '');
+test('summaryItems lists survey bins only with a model; verdict follows outsidePct', () => {
+  const base = { total: 10, outsidePct: 0, gapPct: 5 };
+  assert.equal(summaryItems({ ...base, threshold: null, survey: 3 }).length, 2);
+  assert.equal(summaryItems({ ...base, threshold: 40, survey: 12 })[2], '12 bins just outside the range look suitable but have no records: worth surveying');
+  assert.match(summaryItems({ ...base, threshold: 40, survey: 1 })[2], /^1 bin just outside the range looks suitable but has no records/);
+  assert.equal(summaryItems({ ...base, threshold: 40, survey: 0, lowRecords: 0 }).length, 2);
+  for (const [pct, text] of [[0, 'Range fits the records well'], [9.9, 'Range fits the records well'], [10, 'Range may be too small in places'], [30, 'Range may be too small in places'], [30.1, 'Many records fall outside this range']])
+    assert.equal(verdict({ total: 5, outsidePct: pct }, 'official outline'), `${text} (vs official outline)`);
+});
+
+test('bin rounds large counts', () => {
+  assert.deepEqual([0, 7, 9, 10, 49, 50, 99, 100, 1234, 5000, 98765].map(bin), ['0', '7', '9', 'over 10', 'over 10', 'over 50', 'over 50', 'over 100', 'over 1,000', 'over 5,000', 'over 50,000']);
 });
 
 test('inatIdentifyUrl filters taxon, bbox and quality grade', () => {
@@ -166,7 +175,6 @@ test('inatIdentifyUrl filters taxon, bbox and quality grade', () => {
 test('lowRecords counts records in outsideLow bins and drives the ID-check sentence', () => {
   const r = classify(new Map([['5,5', 3], ['5,6', 3], ['20,5', 7], ['21,5', 4]]), fc(sq(-180 + 5, 90 - 7, -180 + 7, 90 - 5)), 1, { suit: x => x < -170 ? 80 : x < -159 ? 10 : 80 });
   assert.equal(r.lowRecords, 7);
-  assert.match(habitatLine(r), /7 records in low-suitability habitat outside the range are worth an ID check\./);
-  assert.match(habitatLine({ threshold: 40, lowRecords: 1 }), /^1 record in low-suitability habitat outside the range is worth an ID check\.$/);
-  assert.equal(habitatLine({ threshold: 40, lowRecords: 0 }), '');
+  assert.equal(summaryItems(r).at(-1), '7 records outside the range in low-suitability habitat: worth an ID check');
+  assert.equal(summaryItems({ total: 1, outsidePct: 1, gapPct: 1, threshold: 40, lowRecords: 1500 })[2], 'over 1,000 records outside the range in low-suitability habitat: worth an ID check');
 });

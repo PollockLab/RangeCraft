@@ -97,6 +97,11 @@ function setRustgis(file) {
 
 // ---- taxon selection ----
 async function selectTaxon({ key, name }, { fit = true } = {}) {
+  if (state.taxon && String(key) !== state.taxon.key && draw?.all().length) {
+    if (!confirm(`Discard your unsaved drawing for ${state.taxon.name}?`)) { $('q').value = state.taxon.name; writeHash(); return; }
+    state.copy = null; setTool('static'); draw.load({ type: 'FeatureCollection', features: [] }); // load fires syncCard: resets undo, dimmed source, range check
+  }
+  say('');
   state.taxon = { key: String(key), name };
   state.copy = null;
   setRustgis(null);
