@@ -67,8 +67,8 @@ const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
-const lineage = initHistory({ map, state, say, edit: r => editRange(r) });
-const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial(), recordsIn: fc => rangeCheck.recordsIn(fc) });
+const lineage = initHistory({ map, state, say, edit: r => editRange(r), view: (k, d) => patch.view(k, d) });
+const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial(), recordsIn: fc => rangeCheck.recordsIn(fc), legend: () => updateLegend() });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
@@ -177,6 +177,7 @@ function updateLegend() {
     items.push(...rangeCheck.legend());
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
     if (patch.active()) items.push({ label: 'Your additions', swatch: '#2a9d3f' }, { label: 'Your cuts', swatch: '#d62828' });
+    else { const ops = patch.viewOps(); if (ops.has('add')) items.push({ label: 'Additions', swatch: '#2a9d3f' }); if (ops.has('cut')) items.push({ label: 'Cuts', swatch: '#d62828' }); }
     if (draw?.all().length) items.push({ label: 'Your draft', swatch: DRAFT });
     if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }
@@ -188,15 +189,18 @@ const rangeOn = new Map(); // range id -> latest checkbox state, so a quick off/
 async function toggleRange(r, color, on) {
   const id = `range-${r.id}`, taxon = state.taxon;
   rangeOn.set(id, on);
+  const raw = on ? await loadRange(r.file) : null;
+  if (state.taxon !== taxon) return; // species changed while loading
   if (on && !map.getSource(id)) {
-    const data = await patch.display(await loadRange(r.file));
-    if (state.taxon !== taxon) return; // species changed while loading
+    const data = await patch.display(raw);
+    if (state.taxon !== taxon) return;
     if (map.getSource(id)) return; // a concurrent toggle added it while we awaited
     map.addSource(id, { type: 'geojson', data });
     map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': 0.3 } }, 'occ');
     map.addLayer({ id: `${id}-line`, type: 'line', source: id, paint: { 'line-color': color, 'line-width': 2 } }, 'occ');
   }
   for (const l of [`${id}-fill`, `${id}-line`]) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', rangeOn.get(id) ? 'visible' : 'none');
+  patch.view(id, rangeOn.get(id) ? raw : null);
 }
 
 async function showVersions(fit = true) {
