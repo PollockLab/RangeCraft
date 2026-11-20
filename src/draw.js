@@ -3,6 +3,12 @@
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawFreehandMode, TerraDrawSelectMode, TerraDrawRenderMode } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.module.js';
 
+// Terra Draw's polygon mode hard-codes a "Feature has holes" check. Holes are plain GeoJSON and render and survive vertex edits
+// (only the outer ring is editable), so keep the base checks and skip the mode's own.
+class HolePolygonMode extends TerraDrawPolygonMode {
+  validateFeature(f) { return this.validateModeFeature(f, () => ({ valid: true })); }
+}
+
 const EDIT = { feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true, snappable: true } } };
 
 // Flatten a GeoJSON object (FeatureCollection, Feature or geometry) into single Polygon geometries.
@@ -15,7 +21,7 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   const td = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
     modes: [
-      new TerraDrawPolygonMode({ snapping: { toCoordinate: true } }),
+      new HolePolygonMode({ snapping: { toCoordinate: true } }),
       new TerraDrawFreehandMode(),
       new TerraDrawSelectMode({ flags: { polygon: EDIT, freehand: EDIT } }),
       new TerraDrawRenderMode({ modeName: 'view', styles: {} }),

@@ -6,6 +6,8 @@ const ringArea = r => Math.abs(r.reduce((s, [x, y], i) => { const [x2, y2] = r[(
 // Area of a polygon (coordinates = [outer, ...holes]) in square degrees.
 export const polygonArea = rings => rings.reduce((s, r, i) => s + (i ? -1 : 1) * ringArea(r), 0);
 
+export const totalArea = gs => gs.reduce((s, g) => s + polygonArea(g.coordinates), 0);
+
 // op: 'add' | 'cut'; current: Polygon geometries (the whole drawn range); sketch: a Polygon geometry.
 // Returns Polygon geometries (holes kept, slivers dropped). Cut on an empty range returns [].
 export function reshape(op, current, sketch, clip) {

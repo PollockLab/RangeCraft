@@ -5,7 +5,8 @@ const slug = s => String(s || 'anon').toLowerCase().replace(/[^a-z0-9]+/g, '-').
 
 export function buildCollection(features, meta) {
   const created = new Date().toISOString().slice(0, 10);
-  const props = { taxonKey: Number(meta.taxonKey) || meta.taxonKey, scientificName: meta.scientificName, author: meta.author, created, sources: meta.sources, basis: 'new' };
+  const props = { taxonKey: Number(meta.taxonKey) || meta.taxonKey, scientificName: meta.scientificName, author: meta.author, created, sources: meta.sources, basis: meta.derived ? 'expert-outline-edit' : 'new' };
+  if (meta.derived) props.derived_from = `${meta.derived.by} ${meta.derived.created}, ${meta.derived.file}`;
   if (meta.github) props.github = meta.github;
   if (meta.orcid) props.orcid = meta.orcid;
   if (meta.inat) props.inat_login = meta.inat;

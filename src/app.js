@@ -12,10 +12,11 @@ import { initLegend } from './legend.js';
 import { buildIucn, iucnFilename, CODES, DEFAULTS } from './iucn.js';
 import { initRangeCheck } from './rangecheck-ui.js';
 import { initReshape } from './reshape-ui.js';
+import { initCopy } from './copy.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
-const state = { taxon: null, index: null, experts: null, shown: new Set(), official: null };
+const state = { taxon: null, index: null, experts: null, shown: new Set(), official: null, copy: null }; // copy: { id, derived } while the editor holds an edited copy of a community range
 
 const map = new maplibregl.Map({
   container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: [0, 20], zoom: 1.5,
@@ -44,8 +45,9 @@ const syncTools = () => {
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); rangeCheck.refresh(); };
+const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); };
 const reshape = initReshape({ draw: () => draw, say });
+const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard, reshape.apply, () => reshape.reset()); syncTools(); });
 $('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
@@ -63,6 +65,7 @@ async function loadFile(file) {
   if (!file) return;
   try {
     if (!draw) await mapReady;
+    state.copy = null;
     const n = draw.load(JSON.parse(await file.text()));
     if (!n) throw new Error('No polygons found in that file.');
     say(`Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
@@ -82,6 +85,7 @@ function setRustgis(file) {
 // ---- taxon selection ----
 async function selectTaxon({ key, name }, { fit = true } = {}) {
   state.taxon = { key: String(key), name };
+  state.copy = null;
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('share').hidden = false;
@@ -193,7 +197,7 @@ async function showVersions(fit = true) {
     const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit a copy', title: 'Disagree? Copy this range into the editor, then drag vertices or add and cut areas' });
     cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
     edit.addEventListener('click', async () => {
-      try { const fc = await loadRange(r.file); reshape.reset(); draw.load(fc); setRustgis(r.file); say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
+      try { await copyRange(r); say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
       catch (e) { say(e.message); }
     });
     const check = Object.assign(document.createElement('span'), { className: 'check' });
@@ -213,22 +217,23 @@ async function showVersions(fit = true) {
 }
 
 // ---- export / propose ----
-function current() {
+// needName: proposing needs a display name, plain exports do not (COMPILER stays blank).
+function current(needName = false) {
   if (!state.taxon) { say('Select a species first.'); return null; }
   const features = draw?.all() ?? [];
   if (!features.length) { say('Draw at least one polygon first.'); return null; }
   const author = $('author').value.trim();
-  if (!author) { say('Enter a display name.'); $('author').focus(); return null; }
+  if (needName && !author) { say('Enter a display name.'); openPropose(true); $('me').open = true; $('author').focus(); return null; }
   const github = $('github').value.trim();
   if (github && !GITHUB_RE.test(github)) { say('GitHub username: letters, digits, hyphens, up to 39.'); $('github').focus(); return null; }
   const orcid = $('orcid').value.trim(), inat = $('inat').value.trim();
   if (orcid && !ORCID_RE.test(orcid)) { say('ORCID must look like 0000-0002-1825-0097.'); $('orcid').focus(); return null; }
   if (inat && !INAT_RE.test(inat)) { say('iNaturalist username: letters, digits, _ or -.'); $('inat').focus(); return null; }
-  return buildCollection(features, { taxonKey: state.taxon.key, scientificName: state.taxon.name, author, github, orcid, inat, sources: $('sources').value.trim() });
+  return buildCollection(features, { taxonKey: state.taxon.key, scientificName: state.taxon.name, author, github, orcid, inat, sources: $('sources').value.trim(), derived: state.copy?.derived });
 }
 $('export').addEventListener('click', () => { const fc = current(); if (fc) { download(fc); say('Downloaded.'); } });
 $('propose').addEventListener('click', () => {
-  const fc = current();
+  const fc = current(true);
   if (!fc) return;
   if (!fc.properties.sources) { say('Add sources and evidence before proposing.'); $('sources').focus(); return; }
   const url = proposeUrl(fc);
@@ -248,7 +253,7 @@ $('export-iucn').addEventListener('click', async () => {
   try {
     if (!state.taxon) throw new Error('Select a species first.');
     let features = draw?.all() ?? [], compiler = $('author').value.trim();
-    if (features.length && !compiler) { $('author').focus(); throw new Error('Enter a display name.'); }
+    const drawn = features.length > 0;
     if (!features.length) { // no drawing: use the ticked community ranges
       const rs = [...document.querySelectorAll('#versions input:checked')].map(b => state.index.find(r => `v-${r.id}` === b.id)).filter(Boolean);
       if (!rs.length) throw new Error('Draw a polygon or tick a community range first.');
@@ -256,7 +261,7 @@ $('export-iucn').addEventListener('click', async () => {
       compiler = [...new Set(rs.map(r => shownName(r.author)))].join('; ');
     }
     writeHash();
-    const m = { sciName: state.taxon.name, compiler, url: location.href, source: $('sources').value.trim(), year: new Date().getFullYear() };
+    const m = { sciName: state.taxon.name, compiler, url: location.href, source: $('sources').value.trim(), year: new Date().getFullYear(), derived: drawn ? state.copy?.derived : undefined };
     for (const k of Object.keys(CODES)) m[k.toLowerCase()] = $(`iucn-${k}`).value;
     download(buildIucn(features, m), iucnFilename(m.sciName, m.year));
     say('Downloaded IUCN-format GeoJSON. ID_NO is blank for the assessor.');
@@ -298,7 +303,7 @@ $('relay-mail-send').addEventListener('click', async () => {
 $('relay-submit').addEventListener('click', async () => {
   const s = relay.session();
   if (!s) { say('Your sign-in expired. Sign in again.'); $('relay-submit').hidden = true; return; }
-  const fc = current();
+  const fc = current(true);
   if (!fc) return;
   if (!fc.properties.sources) { say('Add sources and evidence before submitting.'); $('sources').focus(); return; }
   $('relay-submit').disabled = true;
