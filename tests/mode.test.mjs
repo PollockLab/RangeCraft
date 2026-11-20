@@ -21,6 +21,7 @@ test('medianGap is the median screen spacing, Infinity for fewer than 2 points',
 });
 
 test('editHint warns about crowded handles and holes', () => {
+  assert.match(editHint(poly([[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]], [[3, 1], [5, 2], [3, 3], [3, 1]]), px(20)), /crosses itself or another border/);
   assert.match(editHint(poly(ring(10, 1)), px(2)), /zoom in/); // 2 px apart
   assert.equal(editHint(poly(ring(10, 1)), px(20)), '');
   assert.match(editHint(poly(ring(10, 10), ring(4, 1)), px(20)), /Hole edges/);
@@ -36,9 +37,17 @@ test('crowded is true only when the outer ring gap is under the handle threshold
 });
 
 test('crosses: bowtie crosses, square and touching hole-free rings do not', () => {
-  assert.equal(crosses([[0, 0], [2, 2], [2, 0], [0, 2], [0, 0]]), true);
-  assert.equal(crosses([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]), false);
-  assert.equal(crosses([[0, 0], [2, 0], [1, 1], [2, 2], [0, 2], [1, 1], [0, 0]]), false); // touches at (1,1), no crossing
+  assert.equal(crosses([[[0, 0], [2, 2], [2, 0], [0, 2], [0, 0]]]), true);
+  assert.equal(crosses([[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]), false);
+  assert.equal(crosses([[[0, 0], [2, 0], [1, 1], [2, 2], [0, 2], [1, 1], [0, 0]]]), false); // touches at (1,1), no crossing
+});
+
+test('crosses: holes crossing the outer ring or each other cross, touching does not', () => {
+  const sq = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
+  assert.equal(crosses([sq, [[1, 1], [2, 1], [2, 2], [1, 1]]]), false); // inside
+  assert.equal(crosses([sq, [[3, 1], [5, 2], [3, 3], [3, 1]]]), true); // pokes through the right side
+  assert.equal(crosses([sq, [[4, 2], [3, 1], [3, 3], [4, 2]]]), false); // touches the outer ring at (4,2)
+  assert.equal(crosses([sq, [[1, 1], [2, 1], [2, 2], [1, 1]], [[1.5, 0.5], [1.8, 1.5], [1.2, 1.5], [1.5, 0.5]]]), true); // two holes cross
 });
 
 test('selectSay names only the drags that work at this zoom', () => {
