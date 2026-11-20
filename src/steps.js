@@ -14,10 +14,12 @@ export function initSteps({ state, draw, $ }) {
     const p = $('panel'); p.classList.toggle('sp-collapsed', cur > 0 && !open);
     $('sp-name').textContent = state.taxon?.name ?? '';
   };
-  return () => {
+  const step = () => {
     if (state.taxon?.key !== last) { last = state.taxon?.key; open = false; }
     cur = !state.taxon ? 0 : draw()?.all().length ? 2 : 1;
     items.forEach((b, i) => { b.parentElement.classList.toggle('done', i < cur); if (i === cur) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
     render();
   };
+  step.close = () => { open = false; }; // an explicit pick (even the same species) re-collapses the block
+  return step;
 }

@@ -3,7 +3,7 @@ import { initSearch } from './search.js';
 import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } from './export.js';
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
-import { initDraw, DRAFT } from './draw.js';
+import { initDraw, polygonsOf, DRAFT } from './draw.js';
 import { renderBoard, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
 import { buildHash, parseHash } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
@@ -93,9 +93,9 @@ async function loadFile(file) {
     if (!draw) await mapReady;
     state.copy = null;
     const gj = JSON.parse(await file.text()), was = patch.active();
+    if (!polygonsOf(gj).length) throw new Error('No polygons found in that file.'); // before leaving patch mode, so a bad file keeps the unsaved patch
     if (was) patch.exit();
     const n = draw.load(gj);
-    if (!n) throw new Error('No polygons found in that file.');
     say(`${was ? 'Patch editing stopped: loaded a file. ' : ''}Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
   } catch (e) { say(`Could not load ${file.name}: ${e.message}`); }
 }
@@ -134,7 +134,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('selected').hidden = $('intro').hidden = true; if (!$('how').dataset.seen) { $('how').dataset.seen = '1'; $('how').open = false; } // collapse on the first pick only; rc-how is untouched
   lock(false);
-  steps();
+  steps.close(); steps();
   $('share').hidden = false;
   $('q').value = name;
   await mapReady;
@@ -185,10 +185,11 @@ $('panel').addEventListener('change', updateLegend);
 
 const rangeOn = new Map(); // range id -> latest checkbox state, so a quick off/on while loading ends where the user left it
 async function toggleRange(r, color, on) {
-  const id = `range-${r.id}`;
+  const id = `range-${r.id}`, taxon = state.taxon;
   rangeOn.set(id, on);
   if (on && !map.getSource(id)) {
     const data = await patch.display(await loadRange(r.file));
+    if (state.taxon !== taxon) return; // species changed while loading
     if (map.getSource(id)) return; // a concurrent toggle added it while we awaited
     map.addSource(id, { type: 'geojson', data });
     map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': 0.3 } }, 'occ');
@@ -267,7 +268,13 @@ function recordsLine(r, cb) {
   show.addEventListener('click', () => { for (const x of document.querySelectorAll('#versions input')) { x.checked = x === cb; x.dispatchEvent(new Event('change', { bubbles: true })); } if (!$('rc-toggle').checked) $('rc-toggle').click(); });
   go.addEventListener('click', async () => {
     go.disabled = true; line.replaceChildren('Counting GBIF records...');
-    try { const n = await rangeCheck.outsideCount(await loadRange(r.file)); line.replaceChildren(outsideLine(n), ...(n ? [' ', show] : [])); }
+    try {
+      const n = await rangeCheck.outsideCount(await loadRange(r.file));
+      if (n == null) return; // species changed meanwhile
+      // The main check prefers a draft or the official outline, so "Show" would not match this count then.
+      const alone = !draw?.all().length && !state.official?.fc;
+      line.replaceChildren(outsideLine(n), ...(n ? alone ? [' ', show] : [' Clear your draft and hide the official outline to compare against this range.'] : []));
+    }
     catch (e) { line.replaceChildren(`Could not check records: ${e.message}`); go.disabled = false; line.append(' ', go); }
   });
   line.append(go);

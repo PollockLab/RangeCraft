@@ -67,7 +67,9 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   async function outsideCount(fc) {
     const box = rc.bbox(fc), taxon = state.taxon;
     if (!box) return 0;
-    const { size, counts } = await binCounts(box, taxon, filter(), () => false, () => {});
+    const stale = () => state.taxon !== taxon;
+    const { size, counts } = await binCounts(box, taxon, filter(), stale, () => {});
+    if (stale()) return null;
     // Same coverage rule as the full check: records beyond a CONUS-only range's coverage are unmapped, not outside.
     return rc.classify(counts, fc, size, { coverage: fc.properties?.coverage ? rc.CONUS : null }).cells.filter(c => c.status === 'outside').length;
   }
