@@ -51,7 +51,7 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
     // Terra Draw has no finish() API; its modes finish on a keyup of keyEvents.finish (Enter) on the map container.
     finish: () => map.getCanvas().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' })),
     mode: () => sketchOp ?? td.getMode(),
-    setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m); },
+    setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m === 'static' ? 'select' : m); }, // idle = select mode, so a click on any drawn shape selects it,
     // Finished polygons only, not helper points or the one being drawn.
     all: () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing),
     setCodes: (id, iucn) => td.updateFeatureProperties(id, { iucn }),

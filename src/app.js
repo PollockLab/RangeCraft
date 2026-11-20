@@ -52,7 +52,7 @@ const HINTS = {
   freehand: 'Click to start, move to draw, click again to finish. Esc cancels.',
   add: 'Draw around the area to add (click to start, click again to finish). Esc cancels.',
   cut: 'Draw around the area to cut away (click to start, click again to finish). Esc cancels.',
-  select: 'Click a shape to select it, then drag it or its vertices. Delete removes it.',
+  select: 'Click a shape to select it, then drag its points or the shape. Delete removes it.',
 };
 const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Done (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
 const syncTools = () => {
@@ -70,8 +70,8 @@ const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshap
 const lineage = initHistory({ map, state, say, edit: r => editRange(r), view: (k, d) => patch.view(k, d) });
 const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial(), recordsIn: fc => rangeCheck.recordsIn(fc), legend: () => updateLegend() });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
-const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
+const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Click it to select and reshape, or propose it below.'); });
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); if (id != null) say('Shape selected. Drag a corner point to reshape, drag the shape to move it, or press Delete.'); else if (draw?.mode() === 'select') say('Click a shape to select and edit it.'); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
 $('open-propose').addEventListener('click', () => { if ($('propose-form').hidden) $('author').removeAttribute('aria-invalid'); openPropose($('propose-form').hidden); });
 $('author').addEventListener('blur', e => { if (!e.target.value.trim()) e.target.setAttribute('aria-invalid', 'true'); }); // error only after the user leaves it empty or submits
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
@@ -79,7 +79,7 @@ syncTools();
 for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => setTool(m));
 addEventListener('keydown', e => {
   if (!draw || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-  if (e.key === 'Escape' && draw.mode() !== 'static') setTool('static');
+  if (e.key === 'Escape' && draw.mode() !== 'select') setTool('static');
   else if ((e.key === 'Delete' || e.key === 'Backspace') && draw.removeSelected()) e.preventDefault();
 });
 $('draw-done').addEventListener('click', () => draw?.finish());
