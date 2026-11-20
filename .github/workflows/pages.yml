@@ -30,6 +30,12 @@ jobs:
         env:
           RANGECRAFT_MAILTO: ${{ vars.RANGECRAFT_MAILTO }}
         run: uv run python scripts/expertise.py || uv run python scripts/expertise.py --offline
+      - name: Import ranges and references (no-op if sources fail)
+        run: uv run python scripts/import_ranges.py || uv run python scripts/import_ranges.py --offline
+      - name: iNaturalist experts (keep previous file if API fails)
+        env:
+          INAT_UA: ${{ vars.INAT_UA }}
+        run: uv run python scripts/inat_experts.py || uv run python scripts/inat_experts.py --offline
       - name: Agreement map (contributors only)
         run: uv run python scripts/consensus.py
       - uses: actions/configure-pages@v5
