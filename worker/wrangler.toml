@@ -1,0 +1,19 @@
+name = "rangecraft-relay"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Comma-separated origins allowed as return URLs and CORS origins.
+APP_ORIGIN = "https://pollocklab.github.io"
+GH_REPO = "PollockLab/rangecraft"
+GH_BASE = "main"
+
+# Create with: npx wrangler kv namespace create RELAY_KV, then paste the id here.
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_ID"
+
+# Secrets (wrangler secret put): HMAC_KEY, GH_APP_ID, GH_APP_PRIVATE_KEY, GH_INSTALLATION_ID,
+# ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, INAT_CLIENT_ID, INAT_CLIENT_SECRET,
+# GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, RESEND_API_KEY, MAIL_FROM.
+# Local dev only: put ALLOW_LOCALHOST=1 in worker/.dev.vars (gitignored) to accept http://localhost return URLs.
