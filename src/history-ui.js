@@ -41,20 +41,23 @@ export function initHistory({ map, state, say, edit }) {
     // An unmessaged root is the first upload: its sources are a citation, not a change message, so they go in the tooltip.
     const head = pr.message ? `Revision by ${shownName(r.author)}, ${r.created}: '${pr.message.length > 140 ? `${pr.message.slice(0, 139)}…` : pr.message}'. ` : `${edit ? 'Revision' : 'Initial range'} by ${shownName(r.author)}, ${r.created}. `;
     const b = el('button', { type: 'button', className: 'rev', title: pr.message || src }, head, el('span', { className: 'muted', textContent: edit ? changeText(d) : '' }));
-    b.addEventListener('click', () => { overlay(d); onPick(b, r); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); });
+    b.addEventListener('click', () => { overlay(d); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
     return b;
   }
 
   async function fill(panel, r) {
     const graph = buildGraph(state.index.filter(x => String(x.taxonKey) === state.taxon.key)), node = graph.get(r.id);
     if (!node) return;
-    const pick = (b, rr) => { for (const x of panel.querySelectorAll('.rev')) x.setAttribute('aria-pressed', x === b); const e = panel.querySelector('.hist-edit'); e.hidden = false; e.onclick = () => edit(rr); };
+    const pick = (b, rr) => { for (const x of panel.querySelectorAll('.rev')) x.setAttribute('aria-pressed', x === b); const e = panel.querySelector('.hist-edit'); e.hidden = false; e.onclick = () => edit(rr); reveal(panel); };
     const list = (nodes, label) => nodes.length ? [el('div', { className: 'muted', textContent: label }), ...nodes] : [];
     const settle = async ns => (await Promise.allSettled(ns.map(n => revision(n, pick)))).map((s, i) => s.status === 'fulfilled' ? el('div', {}, s.value) : el('div', { className: 'muted', textContent: `${ns[i].range.id}: ${s.reason.message}` }));
     const [rev, forks] = await Promise.all([settle(log(graph, r.id)), settle(node.children)]);
     if (open?.panel !== panel) return;
     panel.querySelector('.hist-body').replaceChildren(...list(rev, 'Revisions, oldest first'), ...list(forks, 'Forks of this revision'));
   }
+
+  // Scroll the log clear of the sticky propose card that covers the bottom of the side panel.
+  function reveal(panel) { const over = panel.getBoundingClientRect().bottom - document.getElementById('propose-card').getBoundingClientRect().top; if (over > 0) document.getElementById('panel').scrollBy({ top: over + 8 }); }
 
   // The History button for a range row; the panel opens under the row's <li>.
   function button(r) {
@@ -72,8 +75,7 @@ export function initHistory({ map, state, say, edit }) {
       b.closest('li').append(panel);
       b.setAttribute('aria-expanded', true);
       open = { panel, button: b };
-      // Scroll the log clear of the sticky propose card that covers the bottom of the side panel.
-      fill(panel, r).then(() => { const over = panel.getBoundingClientRect().bottom - document.getElementById('propose-card').getBoundingClientRect().top; if (over > 0) document.getElementById('panel').scrollBy({ top: over + 8 }); }).catch(e => say(e.message));
+      fill(panel, r).then(() => reveal(panel)).catch(e => say(e.message));
     });
     return b;
   }
