@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modeLabel, medianGap, editHint } from '../src/mode.js';
+import { modeLabel, medianGap, crowded, editHint } from '../src/mode.js';
 
 const px = s => ([x, y]) => ({ x: x * s, y: y * s });
 const ring = (n, step) => Array.from({ length: n }, (_, i) => [i * step, 0]);
@@ -21,9 +21,16 @@ test('medianGap is the median screen spacing, Infinity for fewer than 2 points',
 });
 
 test('editHint warns about crowded handles and holes', () => {
-  assert.match(editHint(poly(ring(10, 1)), px(2)), /Zoom in/); // 2 px apart
+  assert.match(editHint(poly(ring(10, 1)), px(2)), /zoom in/); // 2 px apart
   assert.equal(editHint(poly(ring(10, 1)), px(20)), '');
   assert.match(editHint(poly(ring(10, 10), ring(4, 1)), px(20)), /Hole edges/);
-  assert.match(editHint(poly(ring(10, 1), ring(4, 1)), px(2)), /Zoom in.*Hole edges/);
+  assert.match(editHint(poly(ring(10, 1), ring(4, 1)), px(2)), /zoom in.*Hole edges/);
   assert.equal(editHint(null, px(1)), '');
+});
+
+test('crowded is true only when the outer ring gap is under the handle threshold', () => {
+  assert.equal(crowded(poly(ring(10, 1)), px(2)), true);
+  assert.equal(crowded(poly(ring(10, 1)), px(20)), false);
+  assert.equal(crowded(null, px(1)), false);
+  assert.equal(crowded(poly(), px(1)), false);
 });

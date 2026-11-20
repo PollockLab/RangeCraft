@@ -2,6 +2,7 @@
 // is a plain map layer, so it never enters this store.
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawFreehandMode, TerraDrawSelectMode, TerraDrawRenderMode } from 'terra-draw';
 import { createUndo } from './undo.js';
+import { crowded } from './mode.js';
 import { TerraDrawMapLibreGLAdapter } from 'https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.module.js';
 
 // Terra Draw's polygon mode hard-codes a "Feature has holes" check. Holes are plain GeoJSON and render and survive vertex edits
@@ -16,7 +17,9 @@ const SELECT_STYLE = { selectionPointWidth: touch ? 12 : 8, midPointWidth: touch
 
 export const DRAFT = '#0b3d91'; // dark blue outline so the user's own drawing stands out from the basemap and community ranges
 const DRAFT_STYLE = { fillColor: DRAFT, fillOpacity: 0.2, outlineColor: DRAFT, outlineWidth: 3 };
-const EDIT = { feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true, snappable: true } } };
+// selfIntersectable: Terra Draw's kink check also flags holes touching the outer ring, which blocked every vertex drag on real ranges.
+const EDIT = { feature: { draggable: true, selfIntersectable: true, coordinates: { midpoints: true, draggable: true, deletable: true, snappable: true } } };
+const MOVE_ONLY = { feature: { draggable: true } }; // no coordinates flag: Terra Draw creates no vertex or midpoint points, so none can steal a drag
 
 // Flatten a GeoJSON object (FeatureCollection, Feature or geometry) into single Polygon geometries.
 export function polygonsOf(gj) {
@@ -47,9 +50,18 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   map.on('styledata', raise); raise();
   // Dim the GBIF layer (same 0.35 as the range check) while a shape is selected, so handles stay readable.
   const dimOcc = on => map.getLayer('occ') && map.setPaintProperty('occ', 'raster-opacity', on || document.getElementById('rc-toggle')?.checked ? 0.35 : 1);
-  let selected = null;
-  td.on('select', id => { selected = id; dimOcc(true); onSelect(id); });
-  td.on('deselect', () => { selected = null; dimOcc(false); onSelect(null); });
+  let selected = null, swapping = false, hidden = false;
+  // Hide handles while crowded; flags are read when a feature is selected, so a selected shape is reselected quietly.
+  const setHandles = () => {
+    const f = selected != null && td.getSnapshot().find(x => x.id === selected), hide = !!f && crowded(f, c => map.project(c));
+    if (hide === hidden) return;
+    hidden = hide;
+    td.updateModeOptions('select', { flags: { polygon: hide ? MOVE_ONLY : EDIT, freehand: hide ? MOVE_ONLY : EDIT } });
+    if (f && td.getMode() === 'select') { swapping = true; td.deselectFeature(f.id); td.selectFeature(f.id); swapping = false; selected = f.id; onSelect(f.id); }
+  };
+  map.on('zoomend', setHandles);
+  td.on('select', id => { if (swapping) return; selected = id; queueMicrotask(setHandles); dimOcc(true); onSelect(id); }); // microtask: select() reads its flags before this fires and builds points after
+  td.on('deselect', () => { if (swapping) return; selected = null; dimOcc(false); onSelect(null); });
   // Undo/redo: snapshots of the finished polygons (never helper points), recorded when a change ends.
   const undo = createUndo(50);
   const snap = () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing)
