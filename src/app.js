@@ -13,6 +13,7 @@ import { initIucnUi } from './iucn-ui.js';
 import { initRangeCheck } from './rangecheck-ui.js';
 import { initReshape } from './reshape-ui.js';
 import { initCopy } from './copy.js';
+import { initSteps } from './steps.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -34,6 +35,7 @@ const fitPad = narrow ? { top: 70, bottom: 20, left: 20, right: 20 } : 40;
 const setLegend = initLegend(map);
 const rangeCheck = initRangeCheck({ map, state, onChange: () => updateLegend(), drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
 const say = t => { $('msg').textContent = t; };
+const steps = initSteps({ state, draw: () => draw, $ }); steps();
 const mapReady = new Promise(res => map.once('load', res));
 
 // ---- drawing tools ----
@@ -56,7 +58,7 @@ const syncTools = () => {
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); };
+const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); steps(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
@@ -120,6 +122,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('selected').hidden = $('intro').hidden = true;
   lock(false);
+  steps();
   $('share').hidden = false;
   $('q').value = name;
   await mapReady;
