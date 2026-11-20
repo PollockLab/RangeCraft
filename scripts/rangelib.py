@@ -19,7 +19,7 @@ from shapely.prepared import prep
 ROOT = Path(__file__).resolve().parent.parent
 RANGES_DIR = ROOT / "data" / "ranges"
 EARTH_R_KM = 6371.0088
-REQUIRED = ("taxonKey", "author", "created", "github")
+REQUIRED = ("taxonKey", "author", "created")
 BASES = ("expert-outline-edit", "new")
 PERMISSIVE_LICENSES = ("CC0", "CC-BY-4.0", "OGL-Canada-2.0")
 MAX_PARTS = 200
@@ -61,7 +61,7 @@ def load_range(path: Path, today: date | None = None) -> dict:
         raise RangeError(f"taxonKey {meta['taxonKey']!r} is not numeric")
     if str(meta["taxonKey"]) != Path(path).parent.name:
         raise RangeError(f"taxonKey {meta['taxonKey']} does not match directory name")
-    if not isinstance(meta["author"], str) or not isinstance(meta["github"], str):
+    if not isinstance(meta["author"], str) or not isinstance(meta.get("github", ""), str):
         raise RangeError("author and github must be strings")
     # created is informational only (scoring uses the git first-add date), but may not be future.
     if parse_created(meta["created"]) > today:

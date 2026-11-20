@@ -207,7 +207,6 @@ def test_valid_loads(tmp_path):
 @pytest.mark.parametrize("over,msg", [
     ({"taxonKey": None}, "taxonKey"),
     ({"author": None}, "author"),
-    ({"github": None}, "github"),
     ({"created": None}, "created"),
     ({"taxonKey": "abc"}, "numeric"),
     ({"created": "not-a-date"}, "ISO"),
@@ -263,3 +262,7 @@ def test_too_many_parts_rejected(tmp_path):
     d["features"][0]["geometry"] = {"type": "MultiPolygon", "coordinates": [[r] for r in sq]}
     with pytest.raises(RangeError, match="parts"):
         load_range(_write(tmp_path, d))
+
+
+def test_github_optional(tmp_path):
+    assert "github" not in load_range(_write(tmp_path, _fc(github=None)))["meta"]

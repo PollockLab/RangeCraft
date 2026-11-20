@@ -5,7 +5,8 @@ const slug = s => String(s || 'anon').toLowerCase().replace(/[^a-z0-9]+/g, '-').
 
 export function buildCollection(features, meta) {
   const created = new Date().toISOString().slice(0, 10);
-  const props = { taxonKey: Number(meta.taxonKey) || meta.taxonKey, scientificName: meta.scientificName, author: meta.author, github: meta.github, created, sources: meta.sources, basis: 'new' };
+  const props = { taxonKey: Number(meta.taxonKey) || meta.taxonKey, scientificName: meta.scientificName, author: meta.author, created, sources: meta.sources, basis: 'new' };
+  if (meta.github) props.github = meta.github;
   if (meta.orcid) props.orcid = meta.orcid;
   if (meta.inat) props.inat_login = meta.inat;
   return {
