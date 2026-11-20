@@ -128,7 +128,7 @@ test('email magic link: unverified identity, one-time use, rate limit', async ()
 
 test('expired magic link is rejected', async () => {
   const t = await sign(env.HMAC_KEY, 'ml', { nonce: 'n', id: 'x', name: 'n', return: APP + '/' }, 60, Date.now() - 120_000);
-  await env.KV.put('ml:n', '1');
+  await env.KV.put('ml:n', 'a@example.org');
   assert.equal((await get(`/auth/email/callback?t=${t}`, { Cookie: 'rc_ml=n' })).status, 400);
 });
 
@@ -141,16 +141,25 @@ test('email login CSRF: no cookie means a confirmation page, not a token', async
   assert.equal(other.status, 200);
   assert.equal(other.headers.get('Location'), null);
   const html = await other.text();
-  assert.ok(html.includes('victim@example.org') && html.includes('method="post"'));
+  assert.ok(html.includes('v***@e***.org') && html.includes('method="post"'));
+  assert.ok(!html.includes('victim@example.org'));
+  assert.match(other.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/);
   assert.ok(await env.KV.get([...env.KV.m.keys()].find(k => k.startsWith('ml:')))); // GET did not consume it
   const wrong = await get(link.pathname + link.search, { Cookie: 'rc_ml=other' });
   assert.equal(wrong.status, 200); // wrong cookie is treated as missing
   const t = link.searchParams.get('t');
-  const post_ = await handle(new Request('https://relay.example/auth/email/callback', { method: 'POST', body: new URLSearchParams({ t }) }), env);
+  const csrf = other.headers.get('Set-Cookie').match(/rc_csrf=([^;]+)/)[1];
+  assert.equal(JSON.stringify(await verify(env.HMAC_KEY, 'ml', t)).includes('victim'), false); // token holds no address
+  const confirm = (over = {}) => handle(new Request('https://relay.example/auth/email/callback', { method: 'POST', headers: { Origin: 'https://relay.example', Cookie: `rc_csrf=${csrf}`, ...over.headers }, body: new URLSearchParams({ t, csrf, ...over.body }) }), env);
+  // cross-site form post: wrong Origin, missing cookie, or a CSRF value that does not match the cookie
+  assert.equal((await confirm({ headers: { Origin: 'https://evil.io' } })).status, 403);
+  assert.equal((await confirm({ headers: { Origin: '' } })).status, 403);
+  assert.equal((await confirm({ headers: { Cookie: '' } })).status, 403);
+  assert.equal((await confirm({ body: { csrf: 'other' } })).status, 403);
+  const post_ = await confirm();
   assert.equal(post_.status, 303);
   assert.ok(await verify(env.HMAC_KEY, 'session', fragment(post_).get('token')));
-  const again = await handle(new Request('https://relay.example/auth/email/callback', { method: 'POST', body: new URLSearchParams({ t }) }), env);
-  assert.equal(again.status, 400);
+  assert.equal((await confirm()).status, 400);
   assert.ok(start.headers.get('Set-Cookie'));
 });
 
@@ -236,4 +245,23 @@ test('CORS preflight only grants the app origin', async () => {
   assert.equal(ok.headers.get('Access-Control-Allow-Origin'), APP);
   const no = await handle(new Request('https://relay.example/submit', { method: 'OPTIONS', headers: { Origin: 'https://evil.io' } }), env);
   assert.equal(no.headers.get('Access-Control-Allow-Origin'), null);
+});
+
+test('client nonce is signed into the session for oauth and email', async () => {
+  const cn = 'client-nonce-1234';
+  const s = await get('/auth/github/start?cn=' + cn + '&return=' + encodeURIComponent(APP + '/'));
+  const state = new URL(s.headers.get('Location')).searchParams.get('state');
+  assert.equal((await verify(env.HMAC_KEY, 'state', state)).cn, cn);
+  routes['POST https://github.com/login/oauth/access_token'] = () => J({ access_token: 'at' });
+  routes['GET https://api.github.com/user'] = () => J({ id: 1, login: 'a' });
+  const ok = await get(`/auth/github/callback?code=c&state=${state}`, { Cookie: cookie(s) });
+  assert.equal((await verify(env.HMAC_KEY, 'session', fragment(ok).get('token'))).cn, cn);
+  const bad = await get('/auth/github/start?cn=%3Cx%3E&return=' + encodeURIComponent(APP + '/'));
+  assert.equal((await verify(env.HMAC_KEY, 'state', new URL(bad.headers.get('Location')).searchParams.get('state'))).cn, undefined);
+  let mail;
+  routes['POST https://api.resend.com/emails'] = init => { mail = JSON.parse(init.body); return J({}); };
+  const st = await post('/auth/email/start', { email: 'a@example.org', return: APP + '/', cn });
+  const link = new URL(mail.text.match(/https:\/\/\S+/)[0]);
+  const done = await get(link.pathname + link.search, { Cookie: cookie(st) });
+  assert.equal((await verify(env.HMAC_KEY, 'session', fragment(done).get('token'))).cn, cn);
 });

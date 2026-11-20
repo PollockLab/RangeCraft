@@ -20,7 +20,9 @@ async function hit(kv, key, max, ttl) {
   return true;
 }
 
-const session = (env, id) => sign(env.HMAC_KEY, 'session', { provider: id.provider, id: id.id, ...(id.login && { login: String(id.login).slice(0, 100) }), name: String(id.name).slice(0, 100), verified: !!id.verified }, SESSION_TTL);
+const session = (env, id) => sign(env.HMAC_KEY, 'session', { cn: id.cn, provider: id.provider, id: id.id, ...(id.login && { login: String(id.login).slice(0, 100) }), name: String(id.name).slice(0, 100), verified: !!id.verified }, SESSION_TTL);
+// Client nonce: the app keeps it and accepts a returned token only when it carries the same value.
+const clientNonce = v => (/^[A-Za-z0-9_-]{8,64}$/.test(v) ? v : undefined);
 const readCookie = (req, k) => (req.headers.get('Cookie') || '').split(/;\s*/).map(c => c.split('=')).find(([n]) => n === k)?.[1];
 
 export async function handle(req, env) {
@@ -36,11 +38,11 @@ export async function handle(req, env) {
   if (parts[0] === 'auth' && parts.length === 3 && parts[1] === 'email' && parts[2] === 'start' && req.method === 'POST') {
     return out(emailStart(req, env, enabled, origin));
   }
-  if (req.method === 'POST' && url.pathname === '/auth/email/callback' && enabled.includes('email')) return emailCallback(req, env, (await req.formData().catch(() => new FormData())).get('t'));
+  if (req.method === 'POST' && url.pathname === '/auth/email/callback' && enabled.includes('email')) { const f = await req.formData().catch(() => new FormData()); return emailCallback(req, env, f.get('t'), f.get('csrf')); }
   if (parts[0] === 'auth' && parts.length === 3 && req.method === 'GET') {
     const [, p, step] = parts;
     if (!enabled.includes(p)) return reply(404, 'provider disabled');
-    if (p === 'email' && step === 'callback') return emailCallback(req, env, url.searchParams.get('t'));
+    if (p === 'email' && step === 'callback') return emailCallback(req, env, url.searchParams.get('t'), null);
     if (p !== 'email' && step === 'start') return oauthStart(url, req, env, p);
     if (p !== 'email' && step === 'callback') return oauthCallback(url, req, env, p);
   }
@@ -52,7 +54,7 @@ async function oauthStart(url, req, env, p) {
   const ret = checkReturn(env, url.searchParams.get('return'));
   if (!ret) return reply(400, 'return URL is not on an allowed origin');
   const prov = PROVIDERS[p], nonce = randomId();
-  const state = await sign(env.HMAC_KEY, 'state', { nonce, return: ret.toString(), p }, 600);
+  const state = await sign(env.HMAC_KEY, 'state', { nonce, return: ret.toString(), p, cn: clientNonce(url.searchParams.get('cn')) }, 600);
   const q = new URLSearchParams({ response_type: 'code', client_id: env[`${prov.prefix}_CLIENT_ID`], redirect_uri: `${url.origin}/auth/${p}/callback`, state });
   if (prov.scope) q.set('scope', prov.scope);
   if (prov.pkce) { q.set('code_challenge', await pkceChallenge(await pkceVerifier(env.HMAC_KEY, nonce))); q.set('code_challenge_method', 'S256'); }
@@ -69,7 +71,7 @@ async function oauthCallback(url, req, env, p) {
   if (!code) return fail('denied');
   try {
     const id = await PROVIDERS[p].identity(env, { code, redirectUri: `${url.origin}/auth/${p}/callback`, verifier: PROVIDERS[p].pkce ? await pkceVerifier(env.HMAC_KEY, st.nonce) : undefined });
-    return redirect(withParams(st.return, { token: await session(env, id) }), clear);
+    return redirect(withParams(st.return, { token: await session(env, { ...id, cn: st.cn }) }), clear);
   } catch { return fail('signin_failed'); }
 }
 
@@ -83,9 +85,9 @@ async function emailStart(req, env, enabled, origin) {
   const eh = await sha256hex(email), ip = req.headers.get('CF-Connecting-IP') || 'unknown';
   if (!(await hit(env.KV, `rl:email:${eh}`, 3, 3600)) || !(await hit(env.KV, `rl:ip:${ip}`, 10, 3600))) return reply(429, { error: 'too many requests, try later' });
   const nonce = randomId();
-  await env.KV.put(`ml:${nonce}`, '1', { expirationTtl: 900 });
+  await env.KV.put(`ml:${nonce}`, email, { expirationTtl: 900 }); // the address stays server-side
   // The email itself never leaves the token; the public id is a hash prefix.
-  const t = await sign(env.HMAC_KEY, 'ml', { nonce, em: email, id: eh.slice(0, 16), name: String(b.name || '').trim().slice(0, 100) || 'Email contributor', return: ret.toString() }, 900);
+  const t = await sign(env.HMAC_KEY, 'ml', { nonce, cn: clientNonce(b.cn), id: eh.slice(0, 16), name: String(b.name || '').trim().slice(0, 100) || 'Email contributor', return: ret.toString() }, 900);
   try { await sendMagicLink(env, email, `${new URL(req.url).origin}/auth/email/callback?t=${t}`); } catch { return reply(502, { error: 'could not send email' }); }
   // Binds the link to this browser. Cross-site fetch needs SameSite=None; where the browser blocks
   // that cookie, the callback falls back to a confirmation page.
@@ -93,19 +95,26 @@ async function emailStart(req, env, enabled, origin) {
 }
 
 const esc = v => String(v).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
-const page = body => new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>RangeCraft sign-in</title><body style="font:16px system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem">${body}`, {
-  headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Cache-Control': 'no-store' } });
+const maskEmail = e => { const [l = '', d = ''] = String(e).split('@'); const [h, ...t] = d.split('.'); return `${l[0] || ''}***@${h?.[0] || ''}***${t.length ? '.' + t.at(-1) : ''}`; };
+const page = (body, headers = {}) => new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>RangeCraft sign-in</title><body style="font:16px system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem">${body}`, {
+  headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'", 'Cache-Control': 'no-store', ...headers } });
 
 // Without the cookie set by emailStart (link opened in another browser) the token is not handed out
-// on a bare GET: the visitor must confirm, so a link sent to a victim cannot silently sign them in as the attacker.
-async function emailCallback(req, env, token) {
+// on a bare GET: the visitor must confirm. The POST needs the relay's own Origin and a per-render
+// CSRF value that matches a cookie, so another site cannot submit the form for the visitor.
+async function emailCallback(req, env, token, csrf) {
   const c = await verify(env.HMAC_KEY, 'ml', token);
-  if (!c || !(await env.KV.get(`ml:${c.nonce}`))) return reply(400, 'link expired or already used');
-  if (req.method === 'GET' && readCookie(req, 'rc_ml') !== c.nonce) {
-    return page(`<h1>Sign in to RangeCraft?</h1><p>This link signs you in as the email account <b>${esc(c.em)}</b> (unverified). Continue only if you asked for it.</p><form method="post" action="/auth/email/callback"><input type="hidden" name="t" value="${esc(token)}"><button type="submit">Sign in as ${esc(c.em)}</button></form>`);
+  const email = c && await env.KV.get(`ml:${c.nonce}`);
+  if (!email) return reply(400, 'link expired or already used');
+  if (req.method === 'POST') {
+    if (req.headers.get('Origin') !== new URL(req.url).origin || !csrf || readCookie(req, 'rc_csrf') !== csrf) return reply(403, 'request not allowed');
+  } else if (readCookie(req, 'rc_ml') !== c.nonce) {
+    const csrfValue = randomId();
+    return page(`<h1>Sign in to RangeCraft?</h1><p>This link signs you in as the email account <b>${esc(maskEmail(email))}</b> (unverified). Continue only if you asked for it.</p><form method="post" action="/auth/email/callback"><input type="hidden" name="t" value="${esc(token)}"><input type="hidden" name="csrf" value="${csrfValue}"><button type="submit">Sign in</button></form>`,
+      { 'Set-Cookie': `rc_csrf=${csrfValue}; Max-Age=900; Path=/auth; HttpOnly; Secure; SameSite=Lax` });
   }
   await env.KV.delete(`ml:${c.nonce}`);
-  return new Response(null, { status: req.method === 'POST' ? 303 : 302, headers: { Location: withParams(c.return, { token: await session(env, { provider: 'email', id: c.id, name: c.name, verified: false }) }), 'Set-Cookie': 'rc_ml=; Max-Age=0; Path=/auth; HttpOnly; Secure; SameSite=None' } });
+  return new Response(null, { status: req.method === 'POST' ? 303 : 302, headers: { Location: withParams(c.return, { token: await session(env, { provider: 'email', id: c.id, name: c.name, verified: false, cn: c.cn }) }), 'Set-Cookie': 'rc_ml=; Max-Age=0; Path=/auth; HttpOnly; Secure; SameSite=None' } });
 }
 
 async function submit(req, env, origin) {

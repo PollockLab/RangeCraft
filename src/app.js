@@ -184,7 +184,7 @@ async function initRelay() {
     return b;
   }));
   $('relay-email').hidden = !enabled.includes('email');
-  if (err) say(err === 'denied' ? 'Sign-in was cancelled.' : 'Sign-in failed. Try again or use another provider.');
+  if (err) say(err === 'denied' ? 'Sign-in was cancelled.' : err === 'foreign_token' ? 'Ignored a sign-in link that this browser did not start.' : 'Sign-in failed. Try again or use another provider.');
 }
 $('relay-mail-send').addEventListener('click', async () => {
   try { stashDraft(); await relay.emailStart($('relay-mail').value.trim(), $('author').value.trim()); say('Check your inbox, the link is valid for 15 minutes. Your drawing is restored when you open it.'); }
