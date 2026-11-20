@@ -33,11 +33,15 @@ const HINTS = {
 };
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
-  $('hint').textContent = HINTS[draw?.mode()] ?? 'Pick a tool, then draw on the map.';
+  $('hint').textContent = HINTS[draw?.mode()] ?? '';
   $('hint').dataset.idle = !HINTS[draw?.mode()];
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }); syncTools(); });
+// The propose card appears once at least one finished shape exists.
+const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; };
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard); syncTools(); });
+$('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
+function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
 syncTools();
 for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => setTool(m));
 addEventListener('keydown', e => {
@@ -149,7 +153,7 @@ async function showVersions(fit = true) {
   const rs = state.index.filter(r => String(r.taxonKey) === state.taxon.key).sort((a, b) => b.created.localeCompare(a.created));
   if (!rs.length) {
     const first = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Draw the first range' });
-    first.addEventListener('click', () => { setTool('polygon'); say('Draw on the map, then propose it in step 4.'); });
+    first.addEventListener('click', () => { setTool('polygon'); say('Draw on the map, then propose it from the card at the bottom of the panel.'); });
     const li = document.createElement('li');
     li.append('No community ranges for this species yet. ', first);
     ul.replaceChildren(li);
@@ -158,6 +162,11 @@ async function showVersions(fit = true) {
   ul.replaceChildren(...rs.map((r, i) => {
     const color = COLORS[i % COLORS.length];
     const li = document.createElement('li');
+    const row = Object.assign(document.createElement('div'), { className: 'lyr' });
+    const more = Object.assign(document.createElement('div'), { className: 'more', hidden: true });
+    const tgl = Object.assign(document.createElement('button'), { type: 'button', className: 'more-btn', textContent: '⋯', title: 'Score and coverage' });
+    tgl.setAttribute('aria-expanded', false);
+    tgl.addEventListener('click', () => { more.hidden = !more.hidden; tgl.setAttribute('aria-expanded', !more.hidden); });
     const cb = Object.assign(document.createElement('input'), { type: 'checkbox', id: `v-${r.id}`, checked: true });
     cb.dataset.color = color;
     cb.dataset.label = `${shownName(r.author)}, ${r.created}`;
@@ -176,10 +185,14 @@ async function showVersions(fit = true) {
       try { const fc = await loadRange(r.file); draw.load(fc); setRustgis(r.file); say('Loaded into the editor. Modify it, then export or propose.'); }
       catch (e) { say(e.message); }
     });
-    li.append(cb, lab, sc);
+    const check = Object.assign(document.createElement('span'), { className: 'check' });
+    check.append(cb, lab);
+    row.append(check, tgl);
+    more.append(sc);
     const ex = expertiseLine(findExpert(state.experts, r.author), state.taxon.key);
-    if (ex) li.append(ex);
-    li.append(edit);
+    if (ex) more.append(ex);
+    more.append(edit);
+    li.append(row, more);
     loadRange(r.file).then(fc => {
       if (fc.properties?.coverage) edit.before(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
     }).catch(() => {});
@@ -221,6 +234,7 @@ async function initRelay() {
   const draft = relay.takeDraft();
   if (draft) {
     for (const k of ['author', 'github', 'orcid', 'inat', 'sources']) if (draft[k]) $(k).value = draft[k];
+    openPropose(true);
     mapReady.then(() => { try { draw.load({ type: 'FeatureCollection', features: draft.features }); } catch (e) { say(`Could not restore your drawing: ${e.message}`); } });
   }
   let enabled;
@@ -329,9 +343,7 @@ let noun = 'experts';
 async function loadAgreement(taxon) {
   for (const id of ['agree-fill']) if (map.getLayer(id)) map.removeLayer(id);
   if (map.getSource('agree')) map.removeSource('agree');
-  $('agreement').hidden = false;
   $('agree-body').hidden = true;
-  $('agree-empty').hidden = false;
   state.index ??= await loadIndex();
   const [fc, sum] = await Promise.all([loadConsensus(taxon.key), loadConsensusSummary(taxon.key)]);
   if (state.taxon !== taxon || !fc) return;
@@ -346,7 +358,7 @@ async function loadAgreement(taxon) {
   $('agree-legend').replaceChildren(`k of ${n} ${noun} agree: few `, ...PALETTE.map(c => Object.assign(document.createElement('span'), {
     style: `display:inline-block;width:1rem;height:.8rem;background:${c}` })), ' all');
   $('agree-body').hidden = false;
-  $('agree-empty').hidden = true;
+  $('agree-sw').style.background = `linear-gradient(90deg,${PALETTE.join(',')})`;
   updateLegend();
 }
 $('agree-toggle').addEventListener('change', e => {
