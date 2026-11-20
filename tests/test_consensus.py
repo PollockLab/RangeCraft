@@ -51,3 +51,11 @@ def test_build_schema():
     props = {f["properties"]["agree"]: f["properties"] for f in fc["features"]}
     assert props[2] == {"agree": 2, "voters": 2, "share": 1.0, "includes_official": False}
     assert s["consensus_area_km2"] == 3 and s["contested_area_km2"] == 2
+
+
+def test_unverified_committers_never_share_a_vote(monkeypatch, tmp_path):
+    import consensus
+    monkeypatch.setattr(consensus, "git_origin", lambda p: ("unverified:Ana", "unverified", "2026-01-01"))
+    assert consensus.credit_key(tmp_path / "a.geojson") != consensus.credit_key(tmp_path / "b.geojson")
+    monkeypatch.setattr(consensus, "git_origin", lambda p: ("ana", "github", "2026-01-01"))
+    assert consensus.credit_key(tmp_path / "a.geojson") == consensus.credit_key(tmp_path / "b.geojson") == "id:ana"

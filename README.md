@@ -7,7 +7,7 @@ Live site: https://pollocklab.github.io/rangecraft/
 ## Contribute
 
 1. Search for a species and draw one or more polygons.
-2. Enter your GitHub username and your sources, then click **Propose edit**. GitHub opens a new file under `data/ranges/<taxonKey>/`. Commit it to a branch and open a pull request. If the range is too large for a link, use **Export GeoJSON** and upload the file via GitHub.
+2. Enter your GitHub username and your sources, then click **Propose edit**. GitHub opens a new file under `data/ranges/<taxonKey>/`. Commit it to a branch and open a pull request. If the range is too large for a link, use **Export GeoJSON** and upload the file via GitHub. When a relay is configured ([worker/](worker/README.md)), you can instead sign in without GitHub and press **Submit**.
 3. Reviewers discuss and merge. Scores and the leaderboard are computed from merged ranges.
 
 ## Run locally

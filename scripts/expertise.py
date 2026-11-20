@@ -6,7 +6,9 @@ Expertise is not in-app points. Per author (git author of the first commit) and 
   inat_rg_obs_order                       research-grade observations in the species' order
   papers_on_taxon / papers_on_genus       OpenAlex works by the author's ORCID matching the name
   works_total, h_index                    OpenAlex author totals
-ORCID and iNaturalist logins are SELF-DECLARED in the range file. `verified` is true only if the
+Ranges the relay opened for a signed-in orcid or inat submitter (identity "orcid"/"inat") use that
+provider-verified id directly and are marked verified. Other ORCID and iNaturalist logins are
+SELF-DECLARED in the range file. `verified` is true only if the
 iNaturalist profile description or the ORCID researcher-urls contain github.com/<login>, where
 <login> is the GitHub login derived from the merge commit's noreply author email (identity
 "github"). Names from files or free-form git authors are never used; those authors stay
@@ -23,7 +25,7 @@ import time
 
 import requests
 
-from rangelib import RANGES_DIR, ROOT
+from rangelib import RANGES_DIR, ROOT, valid_orcid
 
 GBIF_SPECIES = "https://api.gbif.org/v1/species/"
 INAT = "https://api.inaturalist.org/v1/"
@@ -113,8 +115,15 @@ def gbif_taxonomy(key: int, cache: dict) -> dict:
 def expert_entry(author: str, ranges: list, cache: dict, offline: bool) -> dict:
     last = ranges[-1]
     orcid, login = last.get("orcid"), last.get("inat_login")
+    sub = last.get("submitter") if last.get("identity") in ("orcid", "inat") else None
+    if sub and sub["provider"] == "orcid" and valid_orcid(sub["id"]):
+        orcid, login = sub["id"], None  # the declared other id is not covered by the sign-in
+    elif sub and sub["provider"] == "inat" and sub.get("login"):
+        orcid, login = None, sub["login"]  # id is the numeric credit key, the API lookup needs the login
+    else:
+        sub = None
     e = {"author": author, "display": last["display"], "orcid": orcid, "inat_login": login,
-         "verified": False, "taxa": {}, "works_total": None, "h_index": None}
+         "verified": sub is not None, "taxa": {}, "works_total": None, "h_index": None}
     if offline or not (orcid or login):
         return e
     oa = parse_openalex_author(get_json(f"{OPENALEX}authors/orcid:{orcid}",
@@ -122,10 +131,11 @@ def expert_entry(author: str, ranges: list, cache: dict, offline: bool) -> dict:
         if orcid else None
     if oa:
         e["works_total"], e["h_index"] = oa[1], oa[2]
-    names = (author,) if last.get("identity") == "github" else ()
-    e["verified"] = verified(
-        get_json(INAT + "users/" + login) if login else None,
-        get_json(f"{ORCID_API}{orcid}/researcher-urls") if orcid else None, names)
+    if not sub:
+        names = (author,) if last.get("identity") == "github" else ()
+        e["verified"] = verified(
+            get_json(INAT + "users/" + login) if login else None,
+            get_json(f"{ORCID_API}{orcid}/researcher-urls") if orcid else None, names)
     for r in ranges:
         tx = gbif_taxonomy(r["taxonKey"], cache)
         name = tx.get("scientificName") or r.get("scientificName")

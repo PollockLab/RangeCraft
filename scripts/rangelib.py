@@ -4,6 +4,7 @@ from __future__ import annotations
 import itertools
 import json
 import math
+import os
 import re
 import subprocess
 from datetime import date, datetime
@@ -27,6 +28,9 @@ MAX_BBOX_RATIO = 50  # bbox area / geometry area; blocks sparse specks that infl
 WINDOW_BUFFER_DEG = 2.0
 WKT_LIMIT = 3000  # GBIF answers 400 once the encoded GET URL passes ~3.7 KB (checked live)
 IOU_DUPLICATE = 0.95
+# GitHub login of the relay's App. Only PRs it opens may carry a `submitter` property.
+RELAY_BOT = os.environ.get("RELAY_BOT", "rangecraft-relay[bot]")
+RELAY_PROVIDERS = ("orcid", "inat", "github", "email")
 
 
 class RangeError(ValueError):
@@ -69,6 +73,8 @@ def load_range(path: Path, today: date | None = None) -> dict:
     orcid = meta.get("orcid")
     if orcid is not None and not valid_orcid(orcid):
         raise RangeError(f"orcid {orcid!r} is not a valid ORCID iD")
+    if meta.get("submitter") is not None and not valid_submitter(meta["submitter"]):
+        raise RangeError("submitter must be {provider, id, name, verified} from the relay")
     if meta.get("basis") is not None and meta["basis"] not in BASES:
         raise RangeError(f"basis must be one of {', '.join(BASES)}")
     for k in ("parent", "inat_login", "derived_from", "derived_from_license"):
@@ -119,6 +125,38 @@ def valid_orcid(value) -> bool:
     return digits[15] == ("X" if check == 10 else str(check))
 
 
+def valid_submitter(sub) -> bool:
+    """Shape of the relay's submitter property. Email identities can never be verified. github and
+    inat ids are the permanent numeric ids (logins are renameable), `login` is display/lookup only."""
+    return (isinstance(sub, dict) and sub.get("provider") in RELAY_PROVIDERS
+            and all(isinstance(sub.get(k), str) and sub[k] for k in ("id", "name"))
+            and isinstance(sub.get("verified"), bool)
+            and isinstance(sub.get("login", ""), str)
+            and not (sub["provider"] == "email" and sub["verified"])
+            and not (sub["provider"] in ("github", "inat") and not sub["id"].isdigit()))
+
+
+def file_submitter(path: Path) -> dict | None:
+    """Valid collection-level `submitter` of a range file, else None."""
+    try:
+        sub = (json.loads(Path(path).read_text()).get("properties") or {}).get("submitter")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return sub if valid_submitter(sub) else None
+
+
+def is_relay_email(email: str) -> bool:
+    """True for the noreply address GitHub gives the relay App.
+
+    GitHub sets it as the author of a squash merge of a PR the App opened, so with squash-only
+    merges it is not contributor-chosen. It is not unforgeable by someone who can push to the
+    default branch directly, and a PR whose author merely uses the bot's name or a look-alike email
+    never matches. validate.py separately limits `submitter` to PRs from this repo's own branches.
+    """
+    return re.fullmatch(rf"(?:\d+\+)?{re.escape(RELAY_BOT)}@users\.noreply\.github\.com",
+                        email.strip(), re.IGNORECASE) is not None
+
+
 def exportable(meta: dict) -> bool:
     """Geometry may go in the CC BY export unless derived from an outline we cannot relicense."""
     if meta.get("basis") != "expert-outline-edit":
@@ -158,7 +196,8 @@ def git_origin(path: Path) -> tuple[str, str, str]:
 
     Uses first-parent history, so with squash merges this is the merge commit: its date is set by
     GitHub, not the contributor. Prospective cutoff and credit owner never come from file
-    properties. Uncommitted files: local git user, "unverified", today.
+    properties. Uncommitted files: local git user, "unverified", today. A file first added by the
+    relay bot is credited to its `submitter` as "<provider>:<id>" (identity = provider if verified).
     """
     cwd = Path(path).parent
     out = subprocess.run(
@@ -167,6 +206,9 @@ def git_origin(path: Path) -> tuple[str, str, str]:
         cwd=cwd, capture_output=True, text=True, check=False).stdout.strip()
     if out:
         email, name, day = out.splitlines()[-1].split("\t")
+        sub = file_submitter(path) if is_relay_email(email) else None
+        if sub:  # relay PR: credit the person the relay signed in, not the bot
+            return (f"{sub['provider']}:{sub['id']}", sub["provider"] if sub["verified"] else "unverified", day)
         return (*identity_from_commit(email, name), day)
     who = subprocess.run(["git", "config", "user.name"], cwd=cwd, capture_output=True,
                          text=True, check=False).stdout.strip()

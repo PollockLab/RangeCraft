@@ -71,6 +71,13 @@
       <div class="field"><label for="orcid">ORCID (optional)</label><input id="orcid" placeholder="0000-0002-1825-0097" autocomplete="off"></div>
       <div class="field"><label for="inat">iNaturalist username (optional)</label><input id="inat" autocomplete="off"></div>
       <div class="field"><label for="sources">Sources and evidence (required to propose)</label><textarea id="sources" rows="3" placeholder="Citations, expert knowledge, links"></textarea></div>
+      <div id="relay" hidden>
+        <p id="relay-who" class="muted"></p>
+        <div id="relay-buttons" class="actions"></div>
+        <div id="relay-email" class="field" hidden><label for="relay-mail">Or email a sign-in link (unverified, a maintainer vouches when merging)</label><input id="relay-mail" type="email" autocomplete="email"><button id="relay-mail-send" type="button">Email me a link</button></div>
+        <button id="relay-submit" type="button" class="primary" hidden>Submit</button>
+        <p id="relay-link" role="status"></p>
+      </div>
       <div class="actions">
         <button id="export" type="button">Export GeoJSON</button>
         <label class="btn" title="Load a GeoJSON file into the editor (or drop it on the map), for example one edited in RustGIS">Load file <input id="load-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden></label>

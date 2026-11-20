@@ -14,7 +14,7 @@ from shapely.geometry import mapping, shape
 from shapely.ops import polygonize, unary_union
 from shapely.prepared import prep
 
-from rangelib import RANGES_DIR, ROOT, RangeError, area_km2, imported_source, load_range
+from rangelib import RANGES_DIR, ROOT, RangeError, area_km2, git_origin, imported_source, load_range
 
 OUT_DIR = ROOT / "data" / "consensus"
 OUTLINE_CACHE = ROOT / "data" / "taxa_outline.json"
@@ -84,11 +84,10 @@ def build(voters, includes_official=False, area=area_km2):
 
 # ---- IO -------------------------------------------------------------------------------------
 
-def contributor(path: Path, fallback: str) -> str:
-    r = subprocess.run(["git", "log", "--diff-filter=A", "--follow", "--format=%an", "--", str(path)],
-                       cwd=ROOT, capture_output=True, text=True, check=False)
-    lines = r.stdout.strip().splitlines()
-    return lines[-1] if r.returncode == 0 and lines else fallback
+def credit_key(path: Path) -> str:
+    """Voter key from the verified merge identity; unverified committers vote once per file, never pooled."""
+    key, identity, _ = git_origin(path)
+    return f"file:{path.name}" if identity == "unverified" else f"id:{key}"
 
 
 def load_voters(taxon_dir: Path) -> dict:
@@ -101,7 +100,7 @@ def load_voters(taxon_dir: Path) -> dict:
             print(f"skip {p.name}: {e}", file=sys.stderr)
             continue
         src = imported_source(r["meta"])
-        who = f"source:{src}" if src else f"git:{contributor(p, r['meta']['author'])}"
+        who = f"source:{src}" if src else credit_key(p)
         key = (str(r["meta"]["created"]), p.name)
         if who not in latest or key > latest[who][0]:
             latest[who] = (key, r["geometry"])

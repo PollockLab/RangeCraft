@@ -1,5 +1,7 @@
 // Data access: GBIF suggest/tiles and the repo's static JSON files.
 export const REPO = 'PollockLab/rangecraft';
+// Base URL of the deployed relay worker (see worker/README.md). Empty hides sign-in and relay submit.
+export const RELAY_URL = '';
 
 export async function suggest(q, signal) {
   const r = await fetch(`https://api.gbif.org/v1/species/suggest?q=${encodeURIComponent(q)}&rank=SPECIES&limit=8`, { signal });
