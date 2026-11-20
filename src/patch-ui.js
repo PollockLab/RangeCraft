@@ -4,8 +4,11 @@ import { loadRange } from './api.js';
 import { fetchOutline } from './official.js';
 import { applyPatch, toPatch } from './patch.js';
 import { DRAFT } from './draw.js';
+import { revisionDiff } from './diff.js';
 
-const SRC = 'patch-result', IDS = [`${SRC}-fill`, `${SRC}-line`];
+const SRC = 'patch-result', IDS = [`${SRC}-fill`, `${SRC}-line`], SH = 'patch-shapes', SHIDS = [`${SH}-fill`, `${SH}-line`, `${SH}-cut`];
+const GREEN = '#2a9d3f', RED = '#d62828', km = n => Math.round(n).toLocaleString('en-US');
+const HINT = 'Cut area draws freehand: click once, move around the area, click again to finish. For vertex-by-vertex shapes use Polygon.';
 
 export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
   const bases = new Map(); // official slug -> outline FeatureCollection (view only, never exported)
@@ -13,17 +16,26 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
   const fc = coords => ({ type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) });
   const asPatch = () => ({ features: state.patch.shapes.map(s => ({ properties: { op: s.op }, geometry: s.geometry })) });
 
+  const applied = () => fc(applyPatch(state.patch.baseFc, asPatch(), polygonClipping));
+  const shapes = () => ({ type: 'FeatureCollection', features: state.patch.shapes.map(s => ({ type: 'Feature', properties: { op: s.op }, geometry: s.geometry })) });
   function render() {
-    const data = fc(applyPatch(state.patch.baseFc, asPatch(), polygonClipping));
-    if (map.getSource(SRC)) return map.getSource(SRC).setData(data);
+    const data = applied();
+    if (map.getSource(SRC)) { map.getSource(SRC).setData(data); return map.getSource(SH).setData(shapes()); }
     map.addSource(SRC, { type: 'geojson', data });
     map.addLayer({ id: IDS[0], type: 'fill', source: SRC, paint: { 'fill-color': DRAFT, 'fill-opacity': 0.25 } });
     map.addLayer({ id: IDS[1], type: 'line', source: SRC, paint: { 'line-color': DRAFT, 'line-width': 3 } });
+    const by = (a, b) => ['match', ['get', 'op'], 'cut', a, b];
+    map.addSource(SH, { type: 'geojson', data: shapes() });
+    map.addLayer({ id: SHIDS[0], type: 'fill', source: SH, paint: { 'fill-color': by(RED, GREEN), 'fill-opacity': 0.15 } });
+    const isCut = ['==', ['get', 'op'], 'cut'];
+    map.addLayer({ id: SHIDS[1], type: 'line', source: SH, filter: ['!', isCut], paint: { 'line-color': GREEN, 'line-width': 2.5 } });
+    map.addLayer({ id: SHIDS[2], type: 'line', source: SH, filter: isCut, paint: { 'line-color': RED, 'line-width': 2.5, 'line-dasharray': [2, 1.5] } });
   }
   function exit() {
-    for (const id of IDS) if (map.getLayer(id)) map.removeLayer(id);
-    if (map.getSource(SRC)) map.removeSource(SRC);
+    for (const id of [...SHIDS, ...IDS]) if (map.getLayer(id)) map.removeLayer(id);
+    for (const id of [SH, SRC]) if (map.getSource(id)) map.removeSource(id);
     state.patch = null;
+    $('open-propose').textContent = 'Propose your range';
     $('official-edit').textContent = 'Edit (saved as a patch)';
   }
   // shapes: the earlier patch's shapes when editing a patch, so the new file is cumulative against the official base.
@@ -38,6 +50,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
     if (!state.official?.fc) await showOfficial();
     if (state.taxon !== taxon) return false;
     render(); sync();
+    $('open-propose').textContent = 'Propose this edit';
     $('t-cut').disabled = false; $('t-cut').title = 'Cut area: sketch a shape to remove from the official range (saved as a cut shape)';
     $('official-edit').textContent = 'Stop patch editing';
     return true;
@@ -51,7 +64,14 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
   return {
     active: () => !!state.patch,
     exit,
-    sketch(op, geometry) { state.patch.shapes.push({ op, geometry }); render(); sync(); say(op === 'add' ? 'Area added to your patch.' : 'Area cut in your patch.'); },
+    sketch(op, geometry) {
+      if (new Set(geometry.coordinates[0].map(String)).size < 3) return say(HINT.replace('Cut area', op === 'add' ? 'Add area' : 'Cut area'));
+      const before = applied();
+      state.patch.shapes.push({ op, geometry });
+      const d = revisionDiff(before, applied(), polygonClipping), n = op === 'add' ? d.addedKm2 : d.removedKm2;
+      if (n < 1) { state.patch.shapes.pop(); return say('Nothing changed: draw a larger shape that overlaps the range.'); }
+      render(); sync(); say(op === 'add' ? `Added ${km(n)} km² to the official range.` : `Cut ${km(n)} km² from the official range.`);
+    },
     // Edit an existing patch revision: start from its shapes, with it as the parent.
     async edit(r) { const t = state.taxon, p = await loadRange(r.file); return enter(p.properties.base, p.features.map(f => ({ op: f.properties.op, geometry: f.geometry })), r.file, t); },
     enter,

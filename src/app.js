@@ -176,6 +176,7 @@ function updateLegend() {
     if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
     items.push(...rangeCheck.legend());
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
+    if (patch.active()) items.push({ label: 'Your additions', swatch: '#2a9d3f' }, { label: 'Your cuts', swatch: '#d62828' });
     if (draw?.all().length) items.push({ label: 'Your draft', swatch: DRAFT });
     if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }
