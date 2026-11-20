@@ -2,6 +2,7 @@
 import polygonClipping from 'https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm';
 import { loadRange } from './api.js';
 import { fetchOutline } from './official.js';
+import { loadBase, inatAttribution, parseInatSlug } from './inat.js';
 import { applyPatch, toPatch } from './patch.js';
 import { DRAFT } from './draw.js';
 import { revisionDiff } from './diff.js';
@@ -9,11 +10,12 @@ import { revisionDiff } from './diff.js';
 const SRC = 'patch-result', IDS = [`${SRC}-fill`, `${SRC}-line`], SH = 'patch-shapes', SHIDS = [`${SH}-fill`, `${SH}-line`, `${SH}-cut`, `${SH}-ext`];
 const GREEN = '#2a9d3f', RED = '#d62828', BROWN = '#8d6e63', km = n => Math.round(n).toLocaleString('en-US');
 const cells = n => `${n.toLocaleString('en-US')} grid cell${n === 1 ? '' : 's'}`;
+const withAttribution = (base, fc) => (Object.assign(fc.properties, inatAttribution(base)), fc); // iNat bases carry their license and source
 const HINT = 'Cut area draws freehand: click once, move around the area, click again to finish. For vertex-by-vertex shapes use Polygon.';
 
 export function initPatch({ map, state, $, say, draw, sync, showOfficial, recordsIn, legend }) {
   const bases = new Map(); // official slug -> outline FeatureCollection (view only, never exported)
-  const base = slug => { if (!bases.has(slug)) bases.set(slug, fetchOutline(slug).catch(e => { bases.delete(slug); throw e; })); return bases.get(slug); };
+  const base = slug => { if (!bases.has(slug)) bases.set(slug, loadBase(slug, fetchOutline).catch(e => { bases.delete(slug); throw e; })); return bases.get(slug); };
   const fc = coords => ({ type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) });
   const props = s => s.op === 'recode' ? { op: s.op, presence: s.presence } : { op: s.op };
   const asPatch = () => ({ features: state.patch.shapes.map(s => ({ properties: props(s), geometry: s.geometry })) });
@@ -74,7 +76,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
     state.copy = null;
     draw().load({ type: 'FeatureCollection', features: [] });
     state.patch = { base: slug, baseFc, shapes, parent };
-    if (!state.official?.fc) await showOfficial();
+    if (state.official && !state.official.fc && !parseInatSlug(slug)) await showOfficial(); // an iNat base is its own reference
     if (state.taxon !== taxon) return false;
     render(); sync();
     $('open-propose').textContent = 'Propose this edit';
@@ -135,7 +137,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
     async edit(r) { const t = state.taxon, p = await loadRange(r.file); return enter(p.properties.base, p.features.map(f => ({ op: f.properties.op, ...(f.properties.presence && { presence: f.properties.presence }), geometry: f.geometry })), r.file, t); },
     enter,
     // Polygons drawn with the Polygon tool in patch mode count as adds.
-    build: (features, meta) => toPatch([...state.patch.shapes, ...features.map(f => ({ op: 'add', geometry: f.geometry }))], { ...meta, base: state.patch.base, parent: state.patch.parent }),
+    build: (features, meta) => withAttribution(state.patch.base, toPatch([...state.patch.shapes, ...features.map(f => ({ op: 'add', geometry: f.geometry }))], { ...meta, base: state.patch.base, parent: state.patch.parent })),
     // Map data for a range file: a patch is shown as its applied result, anything else as is.
     async display(data) {
       const p = data.properties;

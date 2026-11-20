@@ -20,6 +20,7 @@ import { initSaved } from './saved.js';
 import { initRelayUi } from './relay-ui.js';
 import { initPatch } from './patch-ui.js';
 import { initUndoUi } from './undo-ui.js';
+import { initInat } from './inat-ui.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -71,6 +72,7 @@ const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 const lineage = initHistory({ map, state, say, edit: r => editRange(r), view: (k, d) => patch.view(k, d) });
 const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial(), recordsIn: fc => rangeCheck.recordsIn(fc), legend: () => updateLegend() });
+const inat = initInat({ map, state, $, say, patch, legend: () => updateLegend() });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Click it to select and reshape, or propose it below.'); });
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); if (id != null) say('Shape selected. Drag a corner point to reshape, drag the shape to move it, or press Delete.'); else if (draw?.mode() === 'select') say('Click a shape to select and edit it.'); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
@@ -143,6 +145,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   setOccurrences();
   rangeCheck.clear();
   setOfficialUi(null);
+  inat.load(state.taxon);
   state.officialReady = loadOfficialMatch(state.taxon);
   loadAgreement(state.taxon);
   await showVersions(fit);
@@ -176,7 +179,7 @@ function updateLegend() {
     if ($('occ-toggle').checked) items.push({ label: 'GBIF occurrences', swatch: 'linear-gradient(90deg,#ffe066,#e5383b)' });
     if (state.official?.fc) items.push({ label: 'Official range (reference)', dashed: true });
     if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
-    items.push(...rangeCheck.legend());
+    items.push(...inat.legend(), ...rangeCheck.legend());
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
     if (patch.active()) items.push({ label: 'Your additions', swatch: '#2a9d3f' }, { label: 'Your cuts', swatch: '#d62828' });
     else { const ops = patch.viewOps(); if (ops.has('add')) items.push({ label: 'Additions', swatch: '#2a9d3f' }); if (ops.has('cut')) items.push({ label: 'Cuts', swatch: '#d62828' }); }
