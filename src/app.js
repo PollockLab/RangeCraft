@@ -11,6 +11,7 @@ import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
 import { buildIucn, iucnFilename, CODES, DEFAULTS } from './iucn.js';
 import { initRangeCheck } from './rangecheck-ui.js';
+import { initReshape } from './reshape-ui.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -28,10 +29,12 @@ const mapReady = new Promise(res => map.once('load', res));
 
 // ---- drawing tools ----
 let draw;
-const TOOLS = { polygon: 't-polygon', freehand: 't-freehand', select: 't-select' };
+const TOOLS = { polygon: 't-polygon', freehand: 't-freehand', add: 't-add', cut: 't-cut', select: 't-select' };
 const HINTS = {
   polygon: 'Click to add points, click the first point to finish. Esc cancels.',
   freehand: 'Click to start, move to draw, click again to finish. Esc cancels.',
+  add: 'Draw around the area to add (click to start, click again to finish). Esc cancels.',
+  cut: 'Draw around the area to cut away (click to start, click again to finish). Esc cancels.',
   select: 'Click a shape to select it, then drag it or its vertices. Delete removes it.',
 };
 const syncTools = () => {
@@ -41,8 +44,9 @@ const syncTools = () => {
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; };
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard); syncTools(); });
+const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); };
+const reshape = initReshape({ draw: () => draw, say });
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard, reshape.apply, () => reshape.reset()); syncTools(); });
 $('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
 syncTools();
@@ -185,22 +189,21 @@ async function showVersions(fit = true) {
     const sc = document.createElement('div');
     sc.className = 'muted';
     sc.textContent = fmtScore(r.score, r);
-    const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit a copy' });
+    const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit a copy', title: 'Disagree? Copy this range into the editor, then drag vertices or add and cut areas' });
     cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
     edit.addEventListener('click', async () => {
-      try { const fc = await loadRange(r.file); draw.load(fc); setRustgis(r.file); say('Loaded into the editor. Modify it, then export or propose.'); }
+      try { const fc = await loadRange(r.file); reshape.reset(); draw.load(fc); setRustgis(r.file); say('Copied into the editor. Drag vertices with Edit, or use Add area / Cut area to reshape.'); }
       catch (e) { say(e.message); }
     });
     const check = Object.assign(document.createElement('span'), { className: 'check' });
     check.append(cb, lab);
-    row.append(check, tgl);
+    row.append(check, edit, tgl);
     more.append(sc);
     const ex = expertiseLine(findExpert(state.experts, r.author), state.taxon.key);
     if (ex) more.append(ex);
-    more.append(edit);
     li.append(row, more);
     loadRange(r.file).then(fc => {
-      if (fc.properties?.coverage) edit.before(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
+      if (fc.properties?.coverage) more.append(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
     }).catch(() => {});
     return li;
   }));
