@@ -83,6 +83,7 @@ header #share .short { display:none; }
 #hint[data-idle=true], #hint:empty { display:none; }
 /* propose card: sticky footer of the panel */
 #propose-card { position:sticky; bottom:0; margin:0 -.75rem; padding:.5rem .75rem; background:var(--panel); border-top:1px solid var(--line); max-height:40%; overflow-y:auto; box-shadow:0 -6px 8px -6px rgba(0,0,0,.35); }
+#propose-card:has(#propose-form:not([hidden])) { position:static; max-height:none; overflow:visible; }
 #propose-card p { margin:.2rem 0; }
 #open-propose { width:100%; }
 #propose-form { margin-top:.5rem; }
