@@ -3,6 +3,7 @@ import { buildIucn, iucnFilename, CODES, DEFAULTS, MAP_STATUS } from './iucn.js'
 import { loadRange } from './api.js';
 import { download } from './export.js';
 import { shownName } from './board.js';
+import { latestCountries } from './eoo-ui.js';
 
 // Returns { select(id) }: call it when the selected polygon changes so the code selects edit that polygon's codes.
 export function initIucnUi({ $, state, draw, say, writeHash, onChange = () => {} }) {
@@ -31,7 +32,7 @@ export function initIucnUi({ $, state, draw, say, writeHash, onChange = () => {}
         compiler = [...new Set(rs.map(r => shownName(r.author)))].join('; ');
       }
       writeHash();
-      const m = { sciName: state.taxon.name, compiler, url: location.href, source: $('sources').value.trim(), mapStatus: $('iucn-status').value, year: new Date().getFullYear(), derived: drawn ? state.copy?.derived : undefined };
+      const m = { sciName: state.taxon.name, compiler, url: location.href, source: $('sources').value.trim(), mapStatus: $('iucn-status').value, countries: drawn ? latestCountries().map(c => c.iso).filter(Boolean) : [], year: new Date().getFullYear(), derived: drawn ? state.copy?.derived : undefined };
       for (const k of Object.keys(CODES)) m[k.toLowerCase()] = defaults[k];
       download(buildIucn(features, m), iucnFilename(m.sciName, m.year));
       say('Downloaded IUCN-format GeoJSON. ID_NO is blank for the assessor.');

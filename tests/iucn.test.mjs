@@ -45,6 +45,8 @@ test('DIST_COMM carries map status then sources; bad status throws', () => {
   assert.equal(dc({ mapStatus: 'Done' }), 'Map status: Done. field notes');
   assert.equal(dc({ mapStatus: 'Not possible', source: '' }), 'Map status: Not possible.');
   assert.throws(() => dc({ mapStatus: 'Finished' }), /Map status/);
+  assert.equal(dc({ countries: ['CA', 'US'] }), 'Map status: Incomplete. Countries: CA, US. field notes');
+  assert.equal(dc({ countries: [], source: '' }), 'Map status: Incomplete.');
 });
 
 test('per-feature codes override the defaults; invalid feature codes throw', () => {

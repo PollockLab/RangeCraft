@@ -25,7 +25,7 @@ export function buildIucn(features, m) {
     ID_NO: '', SCI_NAME: m.sciName,
     COMPILER: m.compiler || '', YEAR: m.year ?? new Date().getFullYear(),
     CITATION: `RangeCraft community range, ${m.url}${d ? `. Derived from ${d.by} ${d.created}, ${d.file}` : ''}`,
-    SOURCE: [d && `Derived from ${d.by} ${d.created}; edited in RangeCraft`, m.source].filter(Boolean).join('. '), DIST_COMM: `Map status: ${status}.${m.source ? ` ${m.source}` : ''}`,
+    SOURCE: [d && `Derived from ${d.by} ${d.created}; edited in RangeCraft`, m.source].filter(Boolean).join('. '), DIST_COMM: `Map status: ${status}.${m.countries?.length ? ` Countries: ${m.countries.join(', ')}.` : ''}${m.source ? ` ${m.source}` : ''}`,
   };
   return { type: 'FeatureCollection', features: features.map(f => ({ type: 'Feature', properties: { ...props, ...Object.fromEntries(Object.keys(CODES).map(k => [k, code(k, f.properties?.[k] ?? dflt[k])])) }, geometry: f.geometry })) };
 }
