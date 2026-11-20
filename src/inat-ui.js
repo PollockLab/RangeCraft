@@ -9,7 +9,7 @@ export function initInat({ map, state, $, say, patch, legend }) {
     for (const id of ['inat-line']) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource('inat')) map.removeSource('inat');
     cur = null;
-    $('inat').hidden = true; $('inat-row').hidden = true; $('inat-toggle').checked = false;
+    $('inat-box').hidden = true; $('inat-row').hidden = true; $('inat-toggle').checked = false;
   };
   function show(on) {
     if (on && !map.getSource('inat')) {
@@ -17,6 +17,9 @@ export function initInat({ map, state, $, say, patch, legend }) {
         if (!cur || map.getSource('inat') || !$('inat-toggle').checked) return;
         map.addSource('inat', { type: 'geojson', data: fc, attribution: 'iNaturalist geomodel, CC BY 4.0' });
         map.addLayer({ id: 'inat-line', type: 'line', source: 'inat', layout: { 'line-cap': 'round' }, paint: { 'line-color': PURPLE, 'line-width': 2.5, 'line-dasharray': [0.1, 2] } }, 'occ');
+        const b = new maplibregl.LngLatBounds();
+        for (const f of fc.features) f.geometry.coordinates.flat(f.geometry.type === 'Polygon' ? 1 : 2).forEach(c => b.extend(c));
+        if (!b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0 });
       }).catch(e => say(e.message));
     }
     if (map.getLayer('inat-line')) map.setLayoutProperty('inat-line', 'visibility', on ? 'visible' : 'none');
@@ -25,6 +28,7 @@ export function initInat({ map, state, $, say, patch, legend }) {
   $('inat-edit').addEventListener('click', async () => {
     if (state.patch) return $('official-edit').click(); // same stop path as the official edit button
     say('Loading the iNaturalist range...');
+    if (!$('inat-toggle').checked) { $('inat-toggle').checked = true; show(true); } // show the range being edited
     try { if (await patch.enter(cur.slug)) say('Patch mode: use Add area and Cut area. Only your shapes are saved, never the iNaturalist range.'); legend(); } catch (e) { say(e.message); }
   });
 
@@ -33,9 +37,9 @@ export function initInat({ map, state, $, say, patch, legend }) {
     async load(taxon) {
       clear();
       let id, fc;
-      try { id = await inatId(taxon.key); fc = id && await inatRange(id, 'latest'); } catch (e) { if (state.taxon === taxon) { $('inat').hidden = false; $('inat-note').textContent = `iNaturalist range unavailable: ${e.message}`; } return; }
+      try { id = await inatId(taxon.key); fc = id && await inatRange(id, 'latest'); } catch (e) { if (state.taxon === taxon) { $('inat-box').hidden = false; $('inat-note').textContent = `iNaturalist range unavailable: ${e.message}`; } return; }
       if (state.taxon !== taxon) return;
-      $('inat').hidden = false;
+      $('inat-box').hidden = false;
       $('inat-note').textContent = fc ? '' : 'No iNaturalist model range for this species.';
       if (!fc) return;
       const version = fc.properties.geomodel_version;
