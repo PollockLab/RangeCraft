@@ -83,8 +83,9 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 #tools button:disabled { opacity:.5; cursor:default; }
 #tools button[aria-pressed=true] { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
 #hint { margin:.3rem 0 0; padding:.2rem .5rem; background:var(--panel); border:1px solid var(--line); border-radius:6px; font-size:.8rem; color:var(--muted); width:fit-content; max-width:22rem; }
-#draw-actions { display:flex; gap:.3rem; margin-top:.3rem; }
+#draw-actions { display:flex; gap:.3rem; margin-top:.3rem; width:fit-content; } /* not full width: the empty part would swallow map clicks */
 #draw-actions button { min-height:2.4rem; min-width:5rem; box-shadow:0 1px 4px rgba(0,0,0,.2); }
+#draw-actions .primary { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); } /* #tools button would otherwise paint it white on white */
 header #share .short { display:none; }
 #hint[data-idle=true], #hint:empty { display:none; }
 /* propose card: sticky footer of the panel */

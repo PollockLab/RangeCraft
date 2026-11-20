@@ -49,19 +49,19 @@ const mapReady = new Promise(res => map.once('load', res));
 let draw;
 const TOOLS = { polygon: 't-polygon', freehand: 't-freehand', add: 't-add', cut: 't-cut', select: 't-select' };
 const HINTS = {
-  polygon: 'Click to add points, click the first point to finish. Esc cancels.',
+  polygon: 'Click to add points, then click the first point or Finish. Esc cancels.',
   freehand: 'Click to start, move to draw, click again to finish. Esc cancels.',
   add: 'Draw around the area to add (click to start, click again to finish). Esc cancels.',
   cut: 'Draw around the area to cut away (click to start, click again to finish). Esc cancels.',
   select: 'Click a shape to select it, then drag its points or the shape. Delete removes it.',
 };
-const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Done (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
+const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Finish (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
   const m = draw?.mode();
   $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '');
   $('hint').dataset.idle = !HINTS[m];
-  $('draw-actions').hidden = !touch || !HINTS[m] || m === 'select';
+  $('draw-actions').hidden = !HINTS[m] || m === 'select';
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
@@ -84,7 +84,7 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && draw.mode() !== 'select') setTool('static');
   else if ((e.key === 'Delete' || e.key === 'Backspace') && draw.removeSelected()) e.preventDefault();
 });
-$('draw-done').addEventListener('click', () => draw?.finish());
+$('draw-done').addEventListener('click', () => { if (draw?.finish() === false) say('Place at least 3 points first, then press Finish.'); });
 $('draw-cancel').addEventListener('click', () => setTool('static'));
 $('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
 

@@ -61,7 +61,13 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   td.on('change', (_ids, type) => { if (!sketchOp) type === 'update' ? onEdit() : onChange(); });
   return {
     // Terra Draw has no finish() API; its modes finish on a keyup of keyEvents.finish (Enter) on the map container.
-    finish: () => map.getCanvas().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' })),
+    // Returns false (and does nothing) while fewer than 3 points are placed: the in-progress ring holds the points, the pointer and the closing vertex.
+    finish() {
+      const f = td.getSnapshot().find(x => x.properties.currentlyDrawing && x.geometry.type === 'Polygon');
+      if (!f || f.geometry.coordinates[0].length < 5) return false;
+      map.getCanvas().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+      return true;
+    },
     mode: () => sketchOp ?? td.getMode(),
     setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m === 'static' ? 'select' : m); }, // idle = select mode, so a click on any drawn shape selects it,
     // Finished polygons only, not helper points or the one being drawn.
