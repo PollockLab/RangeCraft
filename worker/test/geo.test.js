@@ -36,6 +36,14 @@ test('official patches skip the bbox ratio (sparse shapes) but keep the other li
   assert.equal(buildFile(patch, S).properties.base, 'slug');
 });
 
+test('official patch recode needs presence 4 or 5 and keeps it per feature', () => {
+  const patch = p => { const x = fc({ basis: 'official-patch', base: 'slug' }); x.features[0].properties = p; return x; };
+  assert.equal(buildFile(patch({ op: 'recode', presence: 5 }), S).features[0].properties.presence, 5);
+  assert.equal(buildFile(patch({ op: 'recode', presence: 4 }), S).features[0].properties.presence, 4);
+  assert.equal('presence' in buildFile(patch({ op: 'cut', presence: 5 }), S).features[0].properties, false);
+  for (const bad of [undefined, 1, 3, 6, '5', true]) assert.throws(() => buildFile(patch({ op: 'recode', presence: bad }), S), /recode/, String(bad));
+});
+
 test('base must be a slug', () => {
   const p = base => { const x = fc({ basis: 'official-patch', base }); x.features[0].properties = { op: 'add' }; return x; };
   for (const bad of ['Bad Slug', '../x', 'a/b', 'a'.repeat(81)]) assert.throws(() => buildFile(p(bad), S), /slug/, bad);
@@ -81,7 +89,7 @@ test('slug', () => { assert.equal(slug('Ann O\'Neil!'), 'ann-o-neil'); assert.eq
 
 test('official patches keep base, message and per-feature op', () => {
   const patch = fc({ basis: 'official-patch', base: 'lithobates-sylvaticus', message: 'Add Gaspé' });
-  assert.throws(() => buildFile(patch, S), /op 'add' or 'cut'/);
+  assert.throws(() => buildFile(patch, S), /op 'add', 'cut' or 'recode'/);
   patch.features[0].properties = { op: 'cut' };
   const out = buildFile(patch, S);
   assert.equal(out.properties.base, 'lithobates-sylvaticus');

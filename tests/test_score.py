@@ -194,6 +194,19 @@ def test_official_patch_needs_base_and_ops(tmp_path):
     assert load_range(_write(sub, ok))["meta"]["base"] == "slug"
 
 
+def test_official_patch_recode_needs_presence_4_or_5(tmp_path):
+    for i, (presence, good) in enumerate(((5, True), (4, True), (3, False), (None, False), (True, False), ("5", False))):
+        d = _fc(basis="official-patch", base="slug")
+        d["features"][0]["properties"] = {"op": "recode", **({} if presence is None else {"presence": presence})}
+        sub = tmp_path / f"r{i}"
+        sub.mkdir()
+        if good:
+            assert load_range(_write(sub, d))["meta"]["base"] == "slug"
+        else:
+            with pytest.raises(RangeError, match="recode"):
+                load_range(_write(sub, d))
+
+
 def test_official_patch_skips_bbox_ratio_and_checks_base_slug(tmp_path):
     specks = {"type": "MultiPolygon", "coordinates": [
         [[[-170, -80], [-169, -80], [-169, -79], [-170, -79], [-170, -80]]],

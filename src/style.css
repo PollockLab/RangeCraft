@@ -157,7 +157,10 @@ footer p { margin:.3rem 0; }
 #sp-sum .linkbtn { margin:0; font-size:inherit; }
 input[aria-invalid=true] { outline:2px solid #c62828; outline-offset:1px; border-color:#c62828; }
 .timeline { margin:.2rem 0; padding-left:1.2rem; font-size:.85rem; }
+#cut-reason { border:1px solid var(--line, #8886); border-radius:6px; margin:.4rem 0; padding:.3rem .5rem; font-size:.85rem; }
+#cut-reason label { display:flex; align-items:center; gap:.4rem; padding:.15rem 0; }
 @media (max-width: 700px) {
+  #cut-reason label { min-height:44px; }
   .hist-panel a, .linkbtn, #official-edit { min-height:44px; display:inline-flex; align-items:center; }
   #steps { top:-.6rem; padding-top:.9rem; }
 }

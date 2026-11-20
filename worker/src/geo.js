@@ -43,6 +43,8 @@ export function validateRange(fc) {
   if (!sparse && ratio > MAX_BBOX_RATIO) throw new RangeError(`bbox is ${Math.round(ratio)}x the geometry area (limit ${MAX_BBOX_RATIO}x)`);
 }
 
+// 'recode' keeps the area but codes it extirpated: IUCN presence 5 (Extinct) or 4 (Possibly Extinct).
+const validOp = p => ['add', 'cut'].includes(p?.op) || (p?.op === 'recode' && [4, 5].includes(p.presence));
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : undefined);
 
 // Merge collection and first-feature props like rangelib does, then keep only the whitelist.
@@ -56,7 +58,7 @@ export function cleanProps(fc, session, today) {
   if (p.basis && !BASES.includes(p.basis)) throw new RangeError(`basis must be one of ${BASES.join(', ')}`);
   if (p.basis === 'expert-outline-edit' && !p.derived_from) throw new RangeError('basis expert-outline-edit requires derived_from');
   if (p.base !== undefined && !SLUG.test(p.base)) throw new RangeError('base must be a slug: lowercase letters, digits and hyphens, at most 80 characters');
-  if (p.basis === 'official-patch' && (!p.base || fc.features.some(f => !['add', 'cut'].includes(f.properties?.op)))) throw new RangeError("basis official-patch requires base and op 'add' or 'cut' on every feature");
+  if (p.basis === 'official-patch' && (!p.base || fc.features.some(f => !validOp(f.properties)))) throw new RangeError("basis official-patch requires base and op 'add', 'cut' or 'recode' (with presence 4 or 5) on every feature");
   return { ...p, created: today, submitter: { provider: session.provider, id: session.id, ...(session.login && { login: session.login }), name: session.name, verified: !!session.verified } };
 }
 
@@ -66,7 +68,7 @@ export function buildFile(fc, session, now = new Date()) {
   const props = cleanProps(fc, session, now.toISOString().slice(0, 10));
   return {
     type: 'FeatureCollection',
-    features: fc.features.map(f => ({ type: 'Feature', properties: { ...props, ...(props.basis === 'official-patch' && { op: f.properties.op }) }, geometry: { type: f.geometry.type, coordinates: f.geometry.coordinates } })),
+    features: fc.features.map(f => ({ type: 'Feature', properties: { ...props, ...(props.basis === 'official-patch' && { op: f.properties.op, ...(f.properties.op === 'recode' && { presence: f.properties.presence }) }) }, geometry: { type: f.geometry.type, coordinates: f.geometry.coordinates } })),
     properties: props,
   };
 }

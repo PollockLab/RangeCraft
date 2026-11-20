@@ -178,6 +178,7 @@ function updateLegend() {
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
     if (patch.active()) items.push({ label: 'Your additions', swatch: '#2a9d3f' }, { label: 'Your cuts', swatch: '#d62828' });
     else { const ops = patch.viewOps(); if (ops.has('add')) items.push({ label: 'Additions', swatch: '#2a9d3f' }); if (ops.has('cut')) items.push({ label: 'Cuts', swatch: '#d62828' }); }
+    if (patch.viewOps().has('recode')) items.push({ label: 'Extirpated (presence 4/5)', swatch: '#8d6e63' });
     if (draw?.all().length) items.push({ label: 'Your draft', swatch: DRAFT });
     if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }

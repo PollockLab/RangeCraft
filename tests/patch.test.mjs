@@ -10,6 +10,14 @@ const fc = (...gs) => ({ type: 'FeatureCollection', features: gs.map(geometry =>
 const meta = { taxonKey: '1', scientificName: 'X y', author: 'A', sources: 's', base: 'slug' };
 const area = c => areaKm2(c);
 
+test('recode keeps the area and its presence travels in the patch file', { skip }, () => {
+  const base = fc(sq(0, 0, 2)), a0 = area(multi(base));
+  const patch = { features: [{ properties: { op: 'recode', presence: 5 }, geometry: sq(0, 0, 1) }, { properties: { op: 'cut', presence: 5 }, geometry: sq(50, 50, 1) }] };
+  assert.ok(Math.abs(area(applyPatch(base, patch, real)) - a0) < 1);
+  const p = toPatch([{ op: 'recode', presence: 4, geometry: sq(0, 0, 1) }, { op: 'cut', geometry: sq(1, 1, 1) }], meta);
+  assert.deepEqual(p.features.map(f => f.properties), [{ op: 'recode', presence: 4 }, { op: 'cut' }]);
+});
+
 test('toPatch: only the user shapes, op per feature, pointer to the base, no parent for a first patch', () => {
   const p = toPatch([{ op: 'add', geometry: sq(5, 5, 1) }, { op: 'cut', geometry: sq(0, 0, 1) }], { ...meta, message: 'why' });
   assert.deepEqual(p.features.map(f => f.properties), [{ op: 'add' }, { op: 'cut' }]);
