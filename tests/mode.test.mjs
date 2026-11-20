@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modeLabel, medianGap, crowded, editHint } from '../src/mode.js';
+import { modeLabel, medianGap, crowded, editHint, crosses, selectSay, patchHint } from '../src/mode.js';
 
 const px = s => ([x, y]) => ({ x: x * s, y: y * s });
 const ring = (n, step) => Array.from({ length: n }, (_, i) => [i * step, 0]);
@@ -33,4 +33,22 @@ test('crowded is true only when the outer ring gap is under the handle threshold
   assert.equal(crowded(poly(ring(10, 1)), px(20)), false);
   assert.equal(crowded(null, px(1)), false);
   assert.equal(crowded(poly(), px(1)), false);
+});
+
+test('crosses: bowtie crosses, square and touching hole-free rings do not', () => {
+  assert.equal(crosses([[0, 0], [2, 2], [2, 0], [0, 2], [0, 0]]), true);
+  assert.equal(crosses([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]), false);
+  assert.equal(crosses([[0, 0], [2, 0], [1, 1], [2, 2], [0, 2], [1, 1], [0, 0]]), false); // touches at (1,1), no crossing
+});
+
+test('selectSay names only the drags that work at this zoom', () => {
+  const f = { geometry: { coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] } };
+  assert.match(selectSay(f, ([x, y]) => ({ x: x * 100, y: y * 100 })), /Drag a corner point/);
+  assert.match(selectSay(f, ([x, y]) => ({ x, y })), /zoom in to drag single corner points/);
+});
+
+test('patchHint explains that only patch shapes are selectable', () => {
+  assert.match(patchHint('select'), /only shapes you added/);
+  assert.match(patchHint('polygon'), /added to the official range/);
+  assert.equal(patchHint('add'), '');
 });

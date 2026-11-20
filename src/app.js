@@ -21,7 +21,7 @@ import { initRelayUi } from './relay-ui.js';
 import { initPatch } from './patch-ui.js';
 import { initUndoUi } from './undo-ui.js';
 import { initInat } from './inat-ui.js';
-import { syncMode, editHint, copyBtn } from './mode.js';
+import { syncMode, editHint, copyBtn, selectSay, patchHint } from './mode.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -61,7 +61,7 @@ const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Finish (or
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
   const m = draw?.mode(), sel = m === 'select' && draw.all().find(f => f.id === draw.selected());
-  $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '') + (sel ? ' ' + editHint(sel, c => map.project(c)) : '');
+  $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() ? patchHint(m) : '') + (sel ? ' ' + editHint(sel, c => map.project(c)) : '');
   syncMode($, state, (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0));
   $('hint').dataset.idle = !HINTS[m];
   $('draw-actions').hidden = !HINTS[m] || m === 'select';
@@ -77,7 +77,7 @@ const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => sync
 const inat = initInat({ map, state, $, say, patch, legend: () => updateLegend() });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Click it to select and reshape, or propose it below.'); });
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); if (id != null) say('Shape selected. Drag a corner point to reshape, drag the shape to move it, or press Delete.'); else if (draw?.mode() === 'select') say('Click a shape to select and edit it.'); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); if (id != null) say(selectSay(draw.all().find(f => f.id === id), c => map.project(c))); else if (draw?.mode() === 'select') say('Click a shape to select and edit it.'); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
 $('open-propose').addEventListener('click', () => { if ($('propose-form').hidden) $('author').removeAttribute('aria-invalid'); openPropose($('propose-form').hidden); });
 $('author').addEventListener('blur', e => { if (!e.target.value.trim()) e.target.setAttribute('aria-invalid', 'true'); }); // error only after the user leaves it empty or submits
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
