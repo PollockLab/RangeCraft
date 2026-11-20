@@ -18,11 +18,18 @@ from rangelib import RANGES_DIR, RELAY_BOT, ROOT, RangeError, load_range
 
 
 def author_mismatch(meta: dict, pr_author: str, base_meta: dict | None = None,
-                    trusted: bool = False) -> str | None:
+                    trusted: bool = False, relay: bool = False) -> str | None:
     """Ownership check. An existing file stays bound to its owner on the base branch; a file
-    without any owner may only come from a trusted (write-access) PR author."""
+    without any owner may only come from a trusted (write-access) PR author. An existing file with
+    no `github` owner is bound to its submitter (or is maintainer-owned): only a maintainer or the
+    relay (submitter_error pins it to the same submitter) may change it, and only a maintainer may
+    set `github` on it."""
     if not pr_author:
         return None
+    if base_meta is not None and not base_meta.get("github"):
+        if meta.get("github"):
+            return None if trusted and not relay else "github cannot be set on an existing file"
+        return None if trusted or relay else "unowned existing file: only a maintainer or the relay may change it"
     owner = (base_meta or {}).get("github") or meta.get("github")
     if base_meta and base_meta.get("github") and meta.get("github") != base_meta.get("github"):
         return f"github cannot change from {base_meta['github']!r}"
@@ -30,7 +37,7 @@ def author_mismatch(meta: dict, pr_author: str, base_meta: dict | None = None,
         if str(owner).casefold() != pr_author.casefold():
             return f"github {owner!r} differs from PR author {pr_author!r}"
         return None
-    return None if trusted else "github is required unless a maintainer opens the PR"
+    return None if trusted or relay else "github is required unless a maintainer opens the PR"
 
 
 def submitter_error(found: list, pr_author: str, base: dict | None = None) -> str | None:
@@ -100,7 +107,7 @@ def main() -> int:
             continue
         check = changed is None or rel.as_posix() in changed
         base = base_meta(rel.as_posix())
-        msg = (author_mismatch(meta, pr_author, base, trusted or is_relay)
+        msg = (author_mismatch(meta, pr_author, base, trusted, is_relay)
                or submitter_error(found_submitters(f), pr_author, base)) if check and pr_author else None
         if msg:
             errors.append(f"{rel}: {msg}")

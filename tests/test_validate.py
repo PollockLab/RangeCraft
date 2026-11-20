@@ -54,3 +54,19 @@ def test_found_submitters_reads_feature_level(tmp_path):
     assert validate.found_submitters(f) == [{"id": "x"}]
     f.write_text("not json")
     assert validate.found_submitters(f) == []
+
+
+def test_unowned_existing_file_cannot_be_taken_over():
+    base = {"submitter": S}  # relay file: submitter, no github owner
+    assert "maintainer or the relay" in M({"submitter": S}, "mallory", base_meta=base)
+    assert "cannot be set" in M({"submitter": S, "github": "mallory"}, "mallory", base_meta=base)
+    assert "cannot be set" in M({"github": "mallory"}, "mallory", base_meta={})  # legacy unowned
+    assert M({"submitter": S}, "maint", base_meta=base, trusted=True) is None
+    assert M({"submitter": S, "github": "maint"}, "maint", base_meta=base, trusted=True) is None
+    assert M({"submitter": S}, BOT, base_meta=base, relay=True) is None
+    assert "cannot be set" in M({"submitter": S, "github": "x"}, BOT, base_meta=base, relay=True)
+
+
+def test_relay_new_file_needs_no_github():
+    assert M({"submitter": S}, BOT, relay=True) is None
+    assert "differs" in M({"submitter": S, "github": "x"}, BOT, relay=True)
