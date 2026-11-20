@@ -95,6 +95,15 @@ function setRustgis(file) {
   if (file) a.href = `https://web.rustgis.app/?blank&data=${encodeURIComponent(`https://raw.githubusercontent.com/${REPO}/main/${file.startsWith('data/') ? file : `data/ranges/${file}`}`)}`;
 }
 
+// Until a species is picked, the layer toggles and drawing tools do nothing: disable them with a reason.
+const LOCKED = ['occ-toggle', 'rc-toggle', ...Object.values(TOOLS).filter(id => id !== 't-cut')], NEED = 'Pick a species first';
+function lock(on) {
+  for (const id of LOCKED) { const e = $(id); e.dataset.tip ??= e.title; e.disabled = on; e.title = on ? NEED : e.dataset.tip; }
+  $('draw-hint').textContent = on ? 'Pick a species to start.' : 'Draw on the map to propose a range';
+}
+lock(true);
+for (const b of document.querySelectorAll('#intro .example')) b.addEventListener('click', () => selectTaxon({ key: b.dataset.key, name: b.dataset.name }));
+
 // ---- taxon selection ----
 async function selectTaxon({ key, name }, { fit = true } = {}) {
   if (state.taxon && String(key) !== state.taxon.key && draw?.all().length) {
@@ -106,6 +115,8 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   state.copy = null;
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
+  $('selected').hidden = $('intro').hidden = true;
+  lock(false);
   $('share').hidden = false;
   $('q').value = name;
   await mapReady;
