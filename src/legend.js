@@ -8,9 +8,10 @@ export function initLegend(map) {
   const sw = (bg, cls = 'sw') => Object.assign(document.createElement('i'), { className: cls, style: bg ? `background:${bg}` : '' });
   return items => {
     box.hidden = !items.length;
-    box.replaceChildren(...items.map(({ label, swatch, dashed, palette }) => {
+    box.replaceChildren(...items.map(({ label, swatch, dashed, palette, title }) => {
       const row = document.createElement('div');
       row.append(...(palette ? palette.map(c => sw(c)) : [dashed ? sw('', 'sw dashed') : sw(swatch)]), ` ${label}`);
+      if (title) row.title = title;
       return row;
     }));
   };
