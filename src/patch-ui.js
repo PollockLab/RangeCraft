@@ -8,9 +8,10 @@ import { revisionDiff } from './diff.js';
 
 const SRC = 'patch-result', IDS = [`${SRC}-fill`, `${SRC}-line`], SH = 'patch-shapes', SHIDS = [`${SH}-fill`, `${SH}-line`, `${SH}-cut`];
 const GREEN = '#2a9d3f', RED = '#d62828', km = n => Math.round(n).toLocaleString('en-US');
+const cells = n => `${n.toLocaleString('en-US')} grid cell${n === 1 ? '' : 's'}`;
 const HINT = 'Cut area draws freehand: click once, move around the area, click again to finish. For vertex-by-vertex shapes use Polygon.';
 
-export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
+export function initPatch({ map, state, $, say, draw, sync, showOfficial, recordsIn }) {
   const bases = new Map(); // official slug -> outline FeatureCollection (view only, never exported)
   const base = slug => { if (!bases.has(slug)) bases.set(slug, fetchOutline(slug).catch(e => { bases.delete(slug); throw e; })); return bases.get(slug); };
   const fc = coords => ({ type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) });
@@ -31,12 +32,16 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
     map.addLayer({ id: SHIDS[1], type: 'line', source: SH, filter: ['!', isCut], paint: { 'line-color': GREEN, 'line-width': 2.5 } });
     map.addLayer({ id: SHIDS[2], type: 'line', source: SH, filter: isCut, paint: { 'line-color': RED, 'line-width': 2.5, 'line-dasharray': [2, 1.5] } });
   }
+  const PH = $('change-msg').placeholder;
+  let cutRun = 0; // bumped by every new shape and by exit, so a slow record count never overwrites a newer message
   function exit() {
+    cutRun++;
     for (const id of [...SHIDS, ...IDS]) if (map.getLayer(id)) map.removeLayer(id);
     for (const id of [SH, SRC]) if (map.getSource(id)) map.removeSource(id);
     state.patch = null;
     $('open-propose').textContent = 'Propose your range';
     $('official-edit').textContent = 'Edit (saved as a patch)';
+    $('change-msg').placeholder = PH;
   }
   // shapes: the earlier patch's shapes when editing a patch, so the new file is cumulative against the official base.
   // Returns false when the species changed while loading (nothing is entered).
@@ -53,6 +58,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
     $('open-propose').textContent = 'Propose this edit';
     $('t-cut').disabled = false; $('t-cut').title = 'Cut area: sketch a shape to remove from the official range (saved as a cut shape)';
     $('official-edit').textContent = 'Stop patch editing';
+    $('change-msg').placeholder = 'e.g. Cut the north edge: records there are introduced (cite them)';
     return true;
   }
   $('official-edit').addEventListener('click', async () => {
@@ -70,7 +76,14 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
       state.patch.shapes.push({ op, geometry });
       const d = revisionDiff(before, applied(), polygonClipping), n = op === 'add' ? d.addedKm2 : d.removedKm2;
       if (n < 1) { state.patch.shapes.pop(); return say('Nothing changed: draw a larger shape that overlaps the range.'); }
-      render(); sync(); say(op === 'add' ? `Added ${km(n)} km² to the official range.` : `Cut ${km(n)} km² from the official range.`);
+      render(); sync(); cutRun++;
+      if (op === 'add') return say(`Added ${km(n)} km² to the official range.`);
+      const head = `Cut ${km(n)} km² from the official range.`, run = cutRun, taxon = state.taxon;
+      say(`${head} Counting records in the cut...`);
+      recordsIn({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: d.removed } }] }).then(k => {
+        if (k == null || run !== cutRun || state.taxon !== taxon) return;
+        say(k ? `${head} ${cells(k)} with GBIF records ${k === 1 ? 'falls' : 'fall'} in the cut: cite why ${k === 1 ? 'it is' : 'they are'} excluded (e.g. introduced, misidentified, historical) in What changed and why.` : `${head} No GBIF records fall in the cut.`);
+      }).catch(() => run === cutRun && say(`${head} Could not count GBIF records in the cut.`));
     },
     // Edit an existing patch revision: start from its shapes, with it as the parent.
     async edit(r) { const t = state.taxon, p = await loadRange(r.file); return enter(p.properties.base, p.features.map(f => ({ op: f.properties.op, geometry: f.geometry })), r.file, t); },

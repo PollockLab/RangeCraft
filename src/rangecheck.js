@@ -106,6 +106,8 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
   const rangeKm2 = inRange.reduce((a, [, m]) => a + m, 0), aohKm2 = threshold == null ? null : inRange.reduce((a, [v, m]) => a + (v != null && v >= threshold ? m : 0), 0);
   return { cells, aohKm2, rangeKm2, total, unmapped, confirmed, gaps, lowGaps, survey, lowRecords, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
 }
+// Bins with records (count > 0) whose centre falls inside fc; counts is the Map from addTile.
+export const cellsIn = (counts, fc, size) => { const test = inside(fc); return [...counts].filter(([k, n]) => n > 0 && test(...centre(...k.split(',').map(Number), size))).length; };
 // Area in km2 of a w/s/e/n cell on a sphere of mean Earth radius.
 export const cellArea = ({ w, s, e, n }) => 6371.0088 ** 2 * ((e - w) * Math.PI / 180) * (Math.sin(n * Math.PI / 180) - Math.sin(s * Math.PI / 180));
 const cellBox = (i, j, size) => ({ w: -180 + i * size, s: 90 - (j + 1) * size, e: -180 + (i + 1) * size, n: 90 - j * size });

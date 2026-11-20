@@ -73,6 +73,14 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     // Same coverage rule as the full check: records beyond a CONUS-only range's coverage are unmapped, not outside.
     return rc.classify(counts, fc, size, { coverage: fc.properties?.coverage ? rc.CONUS : null }).cells.filter(c => c.status === 'outside').length;
   }
+  // Grid cells with records whose centre falls inside fc (null if the species changed meanwhile); honours the Records filter.
+  async function recordsIn(fc) {
+    const box = rc.bbox(fc), taxon = state.taxon;
+    if (!box) return 0;
+    const stale = () => state.taxon !== taxon;
+    const { size, counts } = await binCounts(box, taxon, filter(), stale, () => {});
+    return stale() ? null : rc.cellsIn(counts, fc, size);
+  }
   async function runRangeCheck(scroll = false) {
     const run = ++rcRun, taxon = state.taxon, mode = filter();
     const stale = () => run !== rcRun || state.taxon !== taxon;
@@ -159,5 +167,5 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   });
   const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range grid cells with records reach.`;
   const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => threshold == null ? k !== 'unmapped' || hasUnmapped : present.has(k)).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k], ...(threshold != null && k !== 'unmapped' && { title: tip() }) })) : [];
-  return { clear, legend, refresh, outsideCount, points: () => pts };
+  return { clear, legend, refresh, outsideCount, recordsIn, points: () => pts };
 }
