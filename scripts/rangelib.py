@@ -21,11 +21,11 @@ RANGES_DIR = ROOT / "data" / "ranges"
 EARTH_R_KM = 6371.0088
 REQUIRED = ("taxonKey", "author", "created")
 BASES = ("expert-outline-edit", "new")
-PERMISSIVE_LICENSES = ("CC0", "CC-BY-4.0", "OGL-Canada-2.0")
+PERMISSIVE_LICENSES = ("CC0", "CC-BY-4.0", "OGL-Canada-2.0", "US-PD")
 MAX_PARTS = 200
 MAX_BBOX_RATIO = 50  # bbox area / geometry area; blocks sparse specks that inflate hits
 WINDOW_BUFFER_DEG = 2.0
-WKT_LIMIT = 6000
+WKT_LIMIT = 3000  # GBIF answers 400 once the encoded GET URL passes ~3.7 KB (checked live)
 IOU_DUPLICATE = 0.95
 
 
@@ -203,11 +203,18 @@ def window_for_taxon(geoms, buf: float = WINDOW_BUFFER_DEG):
 
 
 def wkt_limited(geom: BaseGeometry, limit: int = WKT_LIMIT):
-    """CCW WKT shorter than `limit` chars. Returns (wkt, tolerance_deg, simplified_geom)."""
+    """CCW WKT shorter than `limit` chars. Returns (wkt, tolerance_deg, simplified_geom).
+
+    From tolerance 0.128 deg on, the smallest parts are dropped too (halving per step), because
+    a many-island range cannot otherwise fit a GBIF GET URL. Scoring then undercounts, never over.
+    """
     tol = 0.0
-    for _ in range(30):
+    for i in range(30):
         g = geom if tol == 0 else geom.simplify(tol, preserve_topology=True)
-        parts = [orient(p, 1.0) for p in (g.geoms if hasattr(g, "geoms") else [g])]
+        parts = sorted(g.geoms if hasattr(g, "geoms") else [g], key=lambda p: -p.area)
+        if i > 7:
+            parts = parts[:max(1, len(parts) >> (i - 7))]
+        parts = [orient(p, 1.0) for p in parts]
         g = parts[0] if len(parts) == 1 else MultiPolygon(parts)
         wkt = to_wkt(g, rounding_precision=4, trim=True)
         if len(wkt) < limit and g.is_valid and not g.is_empty:

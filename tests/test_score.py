@@ -266,3 +266,13 @@ def test_too_many_parts_rejected(tmp_path):
 
 def test_github_optional(tmp_path):
     assert "github" not in load_range(_write(tmp_path, _fc(github=None)))["meta"]
+
+
+def test_wkt_limited_drops_small_parts_when_tolerance_is_not_enough():
+    from shapely.geometry import MultiPolygon, Point
+
+    from rangelib import wkt_limited
+    isles = MultiPolygon([Point(i * 3 % 150, i * 3 // 150 * 3).buffer(1, quad_segs=2) for i in range(300)])
+    wkt, _, g = wkt_limited(isles, limit=1500)
+    assert len(wkt) < 1500 and g.is_valid and not g.is_empty
+    assert len(getattr(g, "geoms", [g])) < 300
