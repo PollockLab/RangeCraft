@@ -1,7 +1,17 @@
-"""Score range files against GBIF occurrences; write data/ranges/index.json and leaderboard.json.
+"""Score range files against exact GBIF counts; write data/ranges/index.json and the GeoJSON export.
 
-Credit (null model): max(0, prospective_inside - prospective_total * range_area / window_area)
-where the window is the range bbox buffered by 0.5 deg and prospective = eventDate >= created.
+Per range (all counts are GBIF occurrence/search `count` with limit=0, no sampling cap):
+  window_all/window_post  records in the taxon null window (all / eventDate >= edit_date)
+  inside_all/inside_post  records inside the (simplified) range polygon
+  out_post                window_post - inside_post
+  area_ratio              range area / window area
+  credit = inside_post - window_post * area_ratio       (negative if contradicted by new data)
+  skill  = (inside_post/window_post - r) / (1 - r)      (0 random placement, 1 perfect; null if
+                                                         window_post == 0)
+Credit and skill are per-range quality metrics, not reputation.
+edit_date is the git date the file was first added, not the self-declared `created`.
+Geometry of expert-outline-edit files is omitted from the export unless
+derived_from_license is permissive. Superseded duplicates (same taxon + git author, IoU > 0.95, an later one exists) are not scored.
 """
 from __future__ import annotations
 
@@ -9,76 +19,67 @@ import argparse
 import json
 import sys
 import time
-from collections import defaultdict
 
 import requests
-from shapely.geometry import box
-from shapely.geometry.polygon import orient
+from shapely.geometry import mapping
 
-from rangelib import RANGES_DIR, ROOT, RangeError, area_km2, count_inside, credit, load_range
+from rangelib import (
+    RANGES_DIR,
+    ROOT,
+    RangeError,
+    area_km2,
+    credit,
+    exportable,
+    git_origin,
+    load_range,
+    skill,
+    superseded,
+    taxon_windows,
+    wkt_limited,
+)
 
 GBIF = "https://api.gbif.org/v1/occurrence/search"
-BUFFER_DEG = 0.5
-PAGE = 300
 
 
-def window_for(geom, buf: float = BUFFER_DEG):
-    x0, y0, x1, y1 = geom.bounds
-    return box(max(-180, x0 - buf), max(-90, y0 - buf), min(180, x1 + buf), min(90, y1 + buf))
-
-
-def fetch_points(taxon_key, window, event_date=None, cap=3000):
-    """Return [(lon, lat)] for up to `cap` GBIF occurrences in the window."""
+def gbif_count(taxon_key, wkt, event_date=None) -> int:
     params = {
         "taxonKey": taxon_key, "hasCoordinate": "true", "hasGeospatialIssue": "false",
-        "occurrenceStatus": "PRESENT", "geometry": orient(window, 1.0).wkt, "limit": PAGE,
+        "occurrenceStatus": "PRESENT", "geometry": wkt, "limit": 0,
     }
     if event_date:
         params["eventDate"] = f"{event_date},*"
-    pts, offset = [], 0
-    while offset < cap:
-        for attempt in range(3):
-            try:
-                r = requests.get(GBIF, params={**params, "offset": offset}, timeout=60)
-                r.raise_for_status()
-                break
-            except requests.RequestException:
-                if attempt == 2:
-                    raise
-                time.sleep(2 * (attempt + 1))
-        d = r.json()
-        pts += [(o["decimalLongitude"], o["decimalLatitude"]) for o in d["results"]
-                if "decimalLongitude" in o and "decimalLatitude" in o]
-        offset += PAGE
-        if d.get("endOfRecords"):
-            break
-    return pts[:cap]
+    for attempt in range(3):
+        try:
+            r = requests.get(GBIF, params=params, timeout=60)
+            r.raise_for_status()
+            return int(r.json()["count"])
+        except requests.RequestException:
+            if attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
 
 
-def score_range(rng, cap):
-    geom, meta = rng["geometry"], rng["meta"]
-    window = window_for(geom)
-    created = str(meta["created"])[:10]
-    allp = fetch_points(meta["taxonKey"], window, None, cap)
-    prosp = fetch_points(meta["taxonKey"], window, created, cap)
-    r_area, w_area = area_km2(geom), area_km2(window)
-    inside, p_inside = count_inside(allp, geom), count_inside(prosp, geom)
+def score_range(taxon_key, window, edit_date, simple, tol, i_all, wkt) -> dict:
+    wwkt, _, _ = wkt_limited(window)
+    ratio = min(1.0, area_km2(simple) / area_km2(window))
+    w_all, w_post = gbif_count(taxon_key, wwkt), gbif_count(taxon_key, wwkt, edit_date)
+    i_post = gbif_count(taxon_key, wkt, edit_date)
+    s = skill(i_post, w_post, ratio)
     return {
-        "inside": inside, "total": len(allp),
-        "precision": round(inside / len(allp), 4) if allp else None,
-        "prospective_inside": p_inside, "prospective_total": len(prosp),
-        "area_km2": round(r_area, 1),
-        "credit": round(credit(p_inside, len(prosp), r_area, w_area), 3),
+        "window_all": w_all, "window_post": w_post, "inside_all": i_all, "inside_post": i_post,
+        "out_post": w_post - i_post, "area_km2": round(area_km2(simple), 1),
+        "window_km2": round(area_km2(window), 1), "area_ratio": round(ratio, 6),
+        "credit": round(credit(i_post, w_post, ratio), 3),
+        "skill": None if s is None else round(s, 4), "simplify_tolerance_deg": tol,
     }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--offline", action="store_true", help="skip GBIF, write score null")
-    ap.add_argument("--cap", type=int, default=3000, help="max occurrences per query")
     args = ap.parse_args()
 
-    index, bad = [], 0
+    items, bad = [], 0
     for f in sorted(RANGES_DIR.glob("*/*.geojson")):
         rel = f.relative_to(ROOT).as_posix()
         try:
@@ -88,26 +89,58 @@ def main() -> int:
             bad += 1
             continue
         m = rng["meta"]
-        score = None if args.offline else score_range(rng, args.cap)
-        index.append({
-            "id": f"{m['taxonKey']}/{f.stem}", "taxonKey": int(m["taxonKey"]),
-            "scientificName": m.get("scientificName"), "author": m["author"],
-            "created": str(m["created"]), "file": rel, "score": score,
+        git_author, identity, edit_date = git_origin(f)
+        items.append({
+            "id": f"{m['taxonKey']}/{f.stem}", "taxonKey": int(m["taxonKey"]), "meta": m,
+            "file": rel, "geometry": rng["geometry"], "git_author": git_author, "identity": identity,
+            "edit_date": edit_date,
         })
-        print(f"{rel}: {score}")
 
-    board = defaultdict(lambda: {"ranges": 0, "prospective_inside": 0, "credit": 0.0})
-    for e in index:
-        b = board[e["author"]]
-        b["ranges"] += 1
-        if e["score"]:
-            b["prospective_inside"] += e["score"]["prospective_inside"]
-            b["credit"] += e["score"]["credit"]
-    leaderboard = sorted(
-        ({"author": a, **b, "credit": round(b["credit"], 3)} for a, b in board.items()),
-        key=lambda x: -x["credit"])
+    dupes = superseded(items)
+    evidence = {it["id"] for it in items if it["id"] not in dupes}
+    prep = {}
+    if not args.offline:
+        # inside_all needs no window, so zero-evidence ranges are dropped before windows are built.
+        for it in items:
+            if it["id"] in evidence:
+                wkt, tol, simple = wkt_limited(it["geometry"])
+                prep[it["id"]] = (wkt, tol, simple, gbif_count(it["taxonKey"], wkt))
+        evidence = {i for i in evidence if prep[i][3] > 0}
+    windows = taxon_windows(items, evidence)
+
+    index, features = [], []
+    for it in items:
+        m = it["meta"]
+        counted = it["id"] in evidence
+        reason = None if counted else ("superseded" if it["id"] in dupes else "no_evidence")
+        score = None
+        if counted and not args.offline:
+            wkt, tol, simple, i_all = prep[it["id"]]
+            score = score_range(it["taxonKey"], windows[it["taxonKey"]], it["edit_date"],
+                                simple, tol, i_all, wkt)
+        entry = {
+            "id": it["id"], "taxonKey": it["taxonKey"], "scientificName": m.get("scientificName"),
+            "author": it["git_author"], "identity": it["identity"], "display": m["author"],
+            "github": m["github"], "orcid": m.get("orcid"),
+            "inat_login": m.get("inat_login"), "basis": m.get("basis"), "parent": m.get("parent"),
+            "derived_from": m.get("derived_from"),
+            "derived_from_license": m.get("derived_from_license"),
+            "created": str(m["created"]), "edit_date": it["edit_date"], "file": it["file"],
+            "counted": counted, "reason": reason, "score": score,
+        }
+        index.append(entry)
+        # Outlines derived from non-CC-BY sources keep their score but not their geometry.
+        geom = mapping(it["geometry"]) if exportable(m) else None
+        features.append({"type": "Feature", "geometry": geom,
+                         "properties": {k: v for k, v in entry.items() if k != "score"}
+                         | {"score": score}})
+        print(f"{it['file']}: {score}")
+
     (RANGES_DIR / "index.json").write_text(json.dumps(index, indent=2) + "\n")
-    (ROOT / "data" / "leaderboard.json").write_text(json.dumps(leaderboard, indent=2) + "\n")
+    out = ROOT / "data" / "exports"
+    out.mkdir(exist_ok=True)
+    (out / "ranges.geojson").write_text(
+        json.dumps({"type": "FeatureCollection", "features": features}) + "\n")
     return 1 if bad else 0
 
 
