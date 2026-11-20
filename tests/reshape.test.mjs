@@ -42,3 +42,19 @@ test('totalArea sums parts and subtracts holes; empty is 0', () => {
   assert.equal(totalArea([holed, sq(20, 20, 1)]), 97);
   assert.equal(totalArea([]), 0);
 });
+
+test('carryCodes: codes follow the overlapped polygon; mixed codes reset; untouched sketch gets none', { skip: !real && 'polygon-clipping not installed' }, async () => {
+  const { carryCodes } = await import('../src/reshape.js');
+  const f = (g, iucn) => ({ geometry: g, properties: iucn ? { iucn } : {} }), ext = { PRESENCE: '5' };
+  const before = [f(sq(0, 0, 10), ext), f(sq(20, 0, 10))];
+  // cut a corner of the first polygon: it keeps its codes
+  assert.deepEqual(carryCodes(before, reshape('cut', [before[0].geometry], sq(8, 8, 5), real), real), { codes: [ext], reset: false });
+  // add a separate sketch: existing codes stay, the new polygon has none
+  const sep = reshape('add', before.map(b => b.geometry), sq(50, 0, 5), real);
+  assert.equal(carryCodes(before, sep, real).reset, false);
+  assert.equal(carryCodes(before, sep, real).codes.filter(Boolean).length, 1);
+  // a sketch bridging a coded and an uncoded polygon merges them: ambiguous
+  const merged = reshape('add', before.map(b => b.geometry), { type: 'Polygon', coordinates: [[[9, 2], [21, 2], [21, 4], [9, 4], [9, 2]]] }, real);
+  assert.deepEqual(carryCodes(before, merged, real), { codes: [undefined], reset: true });
+  assert.deepEqual(carryCodes([], merged, real), { codes: [undefined], reset: false });
+});

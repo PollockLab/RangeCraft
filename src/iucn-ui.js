@@ -5,23 +5,24 @@ import { download } from './export.js';
 import { shownName } from './board.js';
 
 // Returns { select(id) }: call it when the selected polygon changes so the code selects edit that polygon's codes.
-export function initIucnUi({ $, state, draw, say, writeHash }) {
-  const defaults = Object.fromEntries(Object.keys(CODES).map(k => [k, DEFAULTS[k]])), perFeature = new Map(); // Terra Draw id -> own codes
-  let selected = null;
-  const show = () => { for (const k of Object.keys(CODES)) $(`iucn-${k}`).value = (selected != null && perFeature.get(selected)?.[k]) || defaults[k]; $('iucn-sel').hidden = selected == null; };
+export function initIucnUi({ $, state, draw, say, writeHash, onChange = () => {} }) {
+  const defaults = Object.fromEntries(Object.keys(CODES).map(k => [k, DEFAULTS[k]]));
+  let selected = null; // a polygon's own codes live in its properties.iucn, so they survive load() and travel with the drawing
+  const cur = () => selected == null ? undefined : draw()?.all().find(f => f.id === selected);
+  const show = () => { for (const k of Object.keys(CODES)) $(`iucn-${k}`).value = cur()?.properties.iucn?.[k] || defaults[k]; $('iucn-sel').hidden = selected == null; };
   for (const [k, labels] of Object.entries(CODES)) {
     const sel = Object.assign(document.createElement('select'), { id: `iucn-${k}` });
     sel.append(...labels.map((l, i) => Object.assign(document.createElement('option'), { value: i + 1, textContent: `${i + 1} ${l}`, selected: i + 1 === DEFAULTS[k] })));
     const field = Object.assign(document.createElement('div'), { className: 'field' });
     field.append(Object.assign(document.createElement('label'), { htmlFor: sel.id, textContent: k[0] + k.slice(1).toLowerCase() }), sel);
-    sel.addEventListener('change', () => { if (selected != null) perFeature.set(selected, { ...perFeature.get(selected), [k]: sel.value }); else defaults[k] = sel.value; });
+    sel.addEventListener('change', () => { const f = cur(); if (f) draw().setCodes(f.id, { ...f.properties.iucn, [k]: sel.value }); else if (selected == null) defaults[k] = sel.value; onChange(); });
     $('iucn-codes').append(field);
   }
   $('iucn-status').append(...MAP_STATUS.map(v => Object.assign(document.createElement('option'), { value: v, textContent: v, selected: v === 'Incomplete' })));
   $('export-iucn').addEventListener('click', async () => {
     try {
       if (!state.taxon) throw new Error('Select a species first.');
-      let features = (draw()?.all() ?? []).map(f => ({ geometry: f.geometry, properties: perFeature.get(f.id) })), compiler = $('author').value.trim();
+      let features = (draw()?.all() ?? []).map(f => ({ geometry: f.geometry, properties: f.properties.iucn })), compiler = $('author').value.trim();
       const drawn = features.length > 0;
       if (!features.length) { // no drawing: use the ticked community ranges
         const rs = [...document.querySelectorAll('#versions input:checked')].map(b => state.index.find(r => `v-${r.id}` === b.id)).filter(Boolean);
@@ -36,5 +37,5 @@ export function initIucnUi({ $, state, draw, say, writeHash }) {
       say('Downloaded IUCN-format GeoJSON. ID_NO is blank for the assessor.');
     } catch (e) { say(e.message); }
   });
-  return { select(id) { selected = id; show(); }, presence: id => perFeature.get(id)?.PRESENCE ?? defaults.PRESENCE };
+  return { select(id) { selected = id; show(); }, presence: f => f.properties?.iucn?.PRESENCE ?? defaults.PRESENCE };
 }

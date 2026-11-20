@@ -49,7 +49,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     const covered = fcs.length > 0 && fcs.every(fc => fc.properties?.coverage);
     return { fc: { type: 'FeatureCollection', features: fcs.flatMap(fc => fc.features ?? []) }, ref: [...new Set(boxes.map(b => b.dataset.author))].join(' + '), coverage: covered ? rc.CONUS : null };
   }
-  async function runRangeCheck() {
+  async function runRangeCheck(scroll = false) {
     const run = ++rcRun, taxon = state.taxon;
     const stale = () => run !== rcRun || state.taxon !== taxon;
     try {
@@ -95,7 +95,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
       onChange();
-      sum.style.scrollMarginTop = '4.5rem'; sum.scrollIntoView({ block: 'start' }); // below the sticky step bar, clear of the sticky propose card at the bottom
+      if (scroll) { sum.style.scrollMarginTop = '4.5rem'; sum.scrollIntoView({ block: 'start' }); } // below the sticky step bar, clear of the sticky propose card at the bottom
     } catch (e) { if (!stale()) clear(`Range check failed: ${e.message}`); }
   }
   $('rc-targets').addEventListener('click', () => {
@@ -105,7 +105,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     a.click();
     URL.revokeObjectURL(a.href);
   });
-  $('rc-toggle').addEventListener('change', e => { if (e.target.checked) { dimOcc(true); runRangeCheck(); } else clear(); });
+  $('rc-toggle').addEventListener('change', e => { if (e.target.checked) { dimOcc(true); runRangeCheck(true); } else clear(); });
   // Re-run when the compared layer changes (official toggle, ticks, drawing); debounced because drawing fires many changes.
   let timer;
   const refresh = () => { if ($('rc-toggle').checked) { clearTimeout(timer); timer = setTimeout(runRangeCheck, 500); } };

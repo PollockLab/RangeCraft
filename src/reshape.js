@@ -15,3 +15,16 @@ export function reshape(op, current, sketch, clip) {
   const res = op === 'add' ? clip.union(...cur, sketch.coordinates) : cur.length ? clip.difference(clip.union(...cur), sketch.coordinates) : [];
   return res.filter(p => polygonArea(p) >= MIN_AREA).map(coordinates => ({ type: 'Polygon', coordinates }));
 }
+
+// IUCN codes (feature.properties.iucn) for each reshaped polygon, from the `before` features it overlaps. If those carry different
+// codes the result is ambiguous: no codes for it, and reset is true so the caller can say so. Returns { codes: [iucn | undefined], reset }.
+export function carryCodes(before, next, clip) {
+  let reset = false;
+  const codes = next.map(g => {
+    const owners = before.filter(f => clip.intersection(f.geometry.coordinates, g.coordinates).reduce((s, p) => s + polygonArea(p), 0) >= MIN_AREA);
+    const keys = new Set(owners.map(f => JSON.stringify(f.properties?.iucn ?? null)));
+    if (keys.size > 1) { reset = true; return undefined; }
+    return owners[0]?.properties?.iucn;
+  });
+  return { codes, reset };
+}

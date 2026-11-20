@@ -15,8 +15,12 @@ const EDIT = { feature: { draggable: true, coordinates: { midpoints: true, dragg
 
 // Flatten a GeoJSON object (FeatureCollection, Feature or geometry) into single Polygon geometries.
 export function polygonsOf(gj) {
-  const geoms = gj?.type === 'FeatureCollection' ? gj.features.map(f => f?.geometry) : gj?.type === 'Feature' ? [gj.geometry] : [gj];
-  return geoms.flatMap(g => g?.type === 'Polygon' ? [g] : g?.type === 'MultiPolygon' ? g.coordinates.map(coordinates => ({ type: 'Polygon', coordinates })) : []);
+  return partsOf(gj).map(p => p.geometry);
+}
+// Same, keeping each feature's IUCN codes (properties.iucn) on every part: [{ geometry, iucn }].
+function partsOf(gj) {
+  const fs = gj?.type === 'FeatureCollection' ? gj.features : gj?.type === 'Feature' ? [gj] : [{ geometry: gj }];
+  return fs.flatMap(f => { const g = f?.geometry, iucn = f?.properties?.iucn; return g?.type === 'Polygon' ? [{ geometry: g, iucn }] : g?.type === 'MultiPolygon' ? g.coordinates.map(coordinates => ({ geometry: { type: 'Polygon', coordinates }, iucn })) : []; });
 }
 
 export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch = () => {}, onEdit = () => {}, onDrawn = () => {}) {
@@ -50,13 +54,14 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
     setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m); },
     // Finished polygons only, not helper points or the one being drawn.
     all: () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing),
+    setCodes: (id, iucn) => td.updateFeatureProperties(id, { iucn }),
     removeSelected() { if (selected == null) return false; td.removeFeatures([selected]); selected = null; onSelect(null); onChange(); return true; },
     // Replace the store with the polygons in gj; returns how many were added.
     load(gj) {
-      const polys = polygonsOf(gj);
+      const polys = partsOf(gj);
       td.clear();
       onChange();
-      const res = td.addFeatures(polys.map(geometry => ({ type: 'Feature', geometry, properties: { mode: 'polygon' } })));
+      const res = td.addFeatures(polys.map(({ geometry, iucn }) => ({ type: 'Feature', geometry, properties: { ...(iucn && { iucn }), mode: 'polygon' } })));
       const bad = res.filter(r => !r.valid);
       onChange();
       if (bad.length) throw new Error(`${bad.length} of ${polys.length} polygons are invalid: ${bad[0].reason}`);

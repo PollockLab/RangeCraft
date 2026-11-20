@@ -1,6 +1,6 @@
 // Add area / Cut area wiring: applies a finished sketch to the drawn range, with one-step undo. Geometry is in reshape.js.
 import polygonClipping from 'https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm';
-import { reshape } from './reshape.js';
+import { reshape, carryCodes } from './reshape.js';
 
 const $ = id => document.getElementById(id);
 const CUT_OFF = 'Copy a range first (Edit a copy) or draw one';
@@ -23,13 +23,13 @@ export function initReshape({ draw, say }) {
     reset() { if (busy) return; prev = null; showUndo(); },
     apply(op, sketch) {
       const d = draw(), before = { type: 'FeatureCollection', features: d.all() };
-      let next;
-      try { next = reshape(op, before.features.map(f => f.geometry), sketch, polygonClipping); } catch (e) { say(`Could not ${op} that area: ${e.message}`); return; }
+      let next, kept;
+      try { next = reshape(op, before.features.map(f => f.geometry), sketch, polygonClipping); kept = carryCodes(before.features, next, polygonClipping); } catch (e) { say(`Could not ${op} that area: ${e.message}`); return; }
       busy = true;
-      try { d.load({ type: 'FeatureCollection', features: next.map(geometry => ({ type: 'Feature', geometry, properties: {} })) }); prev = before; }
+      try { d.load({ type: 'FeatureCollection', features: next.map((geometry, i) => ({ type: 'Feature', geometry, properties: kept.codes[i] ? { iucn: kept.codes[i] } : {} })) }); prev = before; }
       catch (e) { say(`Could not ${op} that area: ${e.message}`); d.load(before); }
       busy = false;
-      if (prev === before) say(op === 'add' ? 'Area added.' : next.length ? 'Area cut.' : 'Everything was cut. Undo to get it back.');
+      if (prev === before) say(kept.reset ? 'Polygon codes reset after reshape; set them again.' : op === 'add' ? 'Area added.' : next.length ? 'Area cut.' : 'Everything was cut. Undo to get it back.');
       showUndo();
     },
   };

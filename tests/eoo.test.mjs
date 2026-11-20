@@ -36,3 +36,12 @@ test('EOO: polygons with presence code 3-6 are excluded, 1-2 kept', () => {
   assert.equal(eoo([a, b], f => (f.id === 'b' ? 2 : 1)), full);
   assert.equal(eoo([a], () => 3), null);
 });
+
+test('AOO: with features, only points inside presence 1-2 polygons count', () => {
+  const a = { id: 'a', ...poly([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]) }, b = { id: 'b', ...poly([[5, 5], [6, 5], [6, 6], [5, 6], [5, 5]]) };
+  const pts = [[0.5, 0.5], [5.5, 5.5], [9, 9]];
+  assert.equal(aoo(pts), 12);
+  assert.equal(aoo(pts, [a, b], f => 1), 8);
+  assert.equal(aoo(pts, [a, b], f => (f.id === 'b' ? 5 : 1)), 4);
+  assert.equal(aoo(pts, [a], () => 5), null);
+});

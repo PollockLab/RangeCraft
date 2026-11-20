@@ -35,7 +35,7 @@ const fitPad = narrow ? { top: 70, bottom: 20, left: 20, right: 20 } : 40;
 
 const setLegend = initLegend(map);
 const rangeCheck = initRangeCheck({ map, state, onChange: () => { updateLegend(); eooUi(); }, drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [], say: t => say(t) });
-const eooUi = initEoo({ $, draw: () => draw, points: () => rangeCheck.points(), presence: id => iucn.presence(id) });
+const eooUi = initEoo({ $, draw: () => draw, points: () => rangeCheck.points(), presence: f => iucn.presence(f) });
 const say = t => { $('msg').textContent = t; };
 const steps = initSteps({ state, draw: () => draw, $ }); steps();
 const mapReady = new Promise(res => map.once('load', res));
@@ -269,7 +269,7 @@ $('propose').addEventListener('click', () => {
   else { download(fc); say(`Range too large for a link. Downloaded; upload it at github.com/PollockLab/rangecraft under data/ranges/${fc.properties.taxonKey}/ via "Add file > Upload files", then open a pull request.`); }
 });
 
-const iucn = initIucnUi({ $, state, draw: () => draw, say, writeHash });
+const iucn = initIucnUi({ $, state, draw: () => draw, say, writeHash, onChange: () => eooUi() });
 
 // ---- relay: submit without a GitHub account ----
 const stashDraft = () => relay.saveDraft({ features: draw?.all() ?? [], ...Object.fromEntries(['author', 'github', 'orcid', 'inat', 'sources'].map(k => [k, $(k).value])) });
