@@ -21,6 +21,7 @@ import { initRelayUi } from './relay-ui.js';
 import { initPatch } from './patch-ui.js';
 import { initUndoUi } from './undo-ui.js';
 import { initInat } from './inat-ui.js';
+import { syncMode, editHint, copyBtn } from './mode.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -59,8 +60,9 @@ const HINTS = {
 const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Finish (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
-  const m = draw?.mode();
-  $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '');
+  const m = draw?.mode(), sel = m === 'select' && draw.all().find(f => f.id === draw.selected());
+  $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '') + (sel ? ' ' + editHint(sel, c => map.project(c)) : '');
+  syncMode($, state, (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0));
   $('hint').dataset.idle = !HINTS[m];
   $('draw-actions').hidden = !HINTS[m] || m === 'select';
 };
@@ -87,8 +89,8 @@ addEventListener('keydown', e => {
   else if ((e.key === 'Delete' || e.key === 'Backspace') && draw.removeSelected()) e.preventDefault();
 });
 $('draw-done').addEventListener('click', () => { if (draw?.finish() === false) say('Place at least 3 points first, then press Finish.'); });
-$('draw-cancel').addEventListener('click', () => setTool('static'));
-$('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
+$('draw-cancel').addEventListener('click', () => setTool('static')); $('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
+$('mode-stop').addEventListener('click', () => $('official-edit').click()); map.on('zoomend', () => draw?.mode() === 'select' && syncTools()); // handle crowding depends on zoom
 
 // Load GeoJSON from a file input or a drop on the map; replaces what is in the editor.
 async function loadFile(file) {
@@ -245,7 +247,8 @@ async function showVersions(fit = true) {
     const sc = document.createElement('div');
     sc.className = 'muted';
     sc.textContent = fmtScore(r.score, r);
-    const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit', title: 'Edit this range. Your version is saved as a new revision linked to this one; the original stays.' });
+    const edit = Object.assign(document.createElement('button'), { type: 'button', className: 'edit', textContent: 'Edit' });
+    if (r.basis !== 'official-patch') { edit.dataset.copy = '1'; copyBtn(edit, !!state.patch); } else edit.title = 'Edit this patch; your version is saved as a new revision linked to it.';
     cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
     edit.addEventListener('click', () => editRange(r));
     const check = Object.assign(document.createElement('span'), { className: 'check' });

@@ -34,6 +34,7 @@
         <label class="btn" title="Load a GeoJSON file into the editor (or drop it on the map), for example one edited in RustGIS"><span aria-hidden="true">📂</span><span class="tx">Load file</span><input id="load-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden></label>
         <button aria-label="Undo" id="t-undo" type="button" hidden title="Undo the last Add area or Cut area"><span aria-hidden="true">↶</span><span class="tx">Undo</span></button>
       </div>
+      <div id="modebar"><p id="mode" aria-live="polite"></p><button id="mode-stop" type="button" hidden title="Stop patch editing; the patch shapes are discarded">Stop</button></div>
       <p id="hint" role="status"></p>
       <div id="draw-actions" hidden><button id="draw-done" type="button" class="primary">Finish</button><button id="draw-cancel" type="button">Cancel</button></div>
     </div>
