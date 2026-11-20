@@ -11,7 +11,7 @@ let countries; // lazy: data/countries.geojson is fetched the first time a drawi
 export function initEoo({ $, draw, points, presence }) {
   let seq = 0; // drops out-of-order results while the drawing keeps changing
   const list = async all => {
-    const n = ++seq;
+    const n = ++seq; latest = [];
     countries ??= fetch('data/countries.geojson').then(r => r.json());
     try {
       const c = countriesIn(all, await countries, presence, polygonClipping.intersection);

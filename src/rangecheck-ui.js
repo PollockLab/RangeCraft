@@ -51,7 +51,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     return { fc: { type: 'FeatureCollection', features: fcs.flatMap(fc => fc.features ?? []) }, ref: [...new Set(boxes.map(b => b.dataset.author))].join(' + '), coverage: covered ? rc.CONUS : null };
   }
   async function runRangeCheck(scroll = false) {
-    const run = ++rcRun, taxon = state.taxon;
+    const run = ++rcRun, taxon = state.taxon, mode = filter();
     const stale = () => run !== rcRun || state.taxon !== taxon;
     try {
       const { fc, ref, coverage } = await reference();
@@ -63,7 +63,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       await Promise.all(Array.from({ length: 4 }, async () => {
         while (next < tiles.length && !stale()) {
           const t = tiles[next++];
-          rc.addTile(counts, t, await densityTile(taxon.key, t, undefined, filter()));
+          rc.addTile(counts, t, await densityTile(taxon.key, t, undefined, mode));
           if (!stale()) $('rc-summary').textContent = `Counting GBIF records... ${Math.round((100 * ++done) / tiles.length)}%`;
         }
       }));
@@ -91,7 +91,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
       const covered = coverage && 'conterminous US', sum = $('rc-summary'), list = document.createElement('ul');
       list.replaceChildren(...rc.summaryItems(res).map(t => Object.assign(document.createElement('li'), { textContent: t })));
-      sum.replaceChildren(Object.assign(document.createElement('em'), { textContent: 'Rough guide: gaps often mean nobody has looked there yet.' }), document.createElement('br'), Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, [ref, rc.RECORD_NOTE[filter()] && `based on ${rc.RECORD_NOTE[filter()]}`].filter(Boolean).join(', ')) }), list);
+      sum.replaceChildren(Object.assign(document.createElement('em'), { textContent: 'Rough guide: gaps often mean nobody has looked there yet.' }), document.createElement('br'), Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, [ref, rc.RECORD_NOTE[mode] && `based on ${rc.RECORD_NOTE[mode]}`].filter(Boolean).join(', ')) }), list);
       sum.title = rc.summaryTip(res, covered, why);
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
