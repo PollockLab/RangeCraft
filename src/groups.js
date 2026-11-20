@@ -41,12 +41,14 @@ export async function speciesByGroup(index, f) {
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
 // Chips with counts plus the species list of the picked group. onSelect({key, name}); onSearch() hands over to free search.
-export function initGroups({ chips, list, load, onSelect, onSearch }) {
+export function initGroups({ chips, note, list, load, onSelect, onSearch }) {
   let by = null, active = null;
   const draw = () => {
-    chips.replaceChildren(...GROUPS.map(g => {
+    if (by && active && !by[active].length) active = null;
+    if (note) note.textContent = by ? `Pilot: ${by.all.length} species with ranges so far. Agreement maps appear once a species has 2+ ranges.` : '';
+    chips.replaceChildren(...GROUPS.filter(g => !by || by[g.id].length).map(g => {
       const n = by?.[g.id].length;
-      const b = el('button', { type: 'button', className: 'chip', disabled: n === 0, title: n === 0 ? 'No species with ranges yet' : '' },
+      const b = el('button', { type: 'button', className: 'chip' },
         el('span', { textContent: g.icon }), ` ${g.label} `, el('b', { textContent: n ?? '…' }));
       b.dataset.group = g.id;
       b.setAttribute('aria-pressed', active === g.id);

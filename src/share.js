@@ -1,6 +1,6 @@
-// Shareable view state in the URL hash, e.g. #taxon=2427072&ranges=2427072/a&official=1&at=4/50.1/-80.2
+// Shareable view state in the URL hash, e.g. #taxon=2427072&ranges=2427072/a&official=1&rc=1&at=4/50.1/-80.2
 const ID_RE = /^\d+\/\w[\w.-]*$/;
-const DEFAULT_ON = ['occ', 'agree'], DEFAULT_OFF = ['official', 'sdm'];
+const DEFAULT_ON = ['occ', 'agree'], DEFAULT_OFF = ['official', 'sdm', 'rc'];
 
 export function buildHash(s) {
   const p = new URLSearchParams({ taxon: s.taxon });

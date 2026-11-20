@@ -1,5 +1,7 @@
 // Range check: compare GBIF's native square bins with a range. Pure logic, no DOM or network.
-export const COLORS = { outside: '#d62828', gap: '#1d6fd1' };
+export const COLORS = { outside: '#d62828', gap: '#1d6fd1', unmapped: '#8a8a8a' };
+// shortcut: conterminous US as a coarse ring (24.5-49 N, -125 to -66.9 W, with the Great Lakes border cut in so southern Ontario and Quebec fall outside). Upgrade to a real outline if edge bins matter.
+export const CONUS = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[-125, 24.5], [-125, 48.4], [-123, 49], [-95.2, 49], [-94.6, 48.7], [-89.6, 48], [-84.5, 46.5], [-82.4, 43], [-83.1, 42], [-79, 42.8], [-79, 43.3], [-76.5, 43.6], [-75, 45], [-71.5, 45], [-70.3, 46.4], [-69.2, 47.4], [-67.8, 47.1], [-67, 44.8], [-66.9, 24.5], [-125, 24.5]]] } }] };
 export const SQUARE = 128; // GBIF bin size in 4096-unit tile pixels
 const ZOOMS = [4, 3, 2]; // finest first; bins are 360 / 2^(z+1) * SQUARE / 4096 degrees
 export const binSize = z => (360 / 2 ** (z + 1)) * (SQUARE / 4096);
@@ -59,11 +61,15 @@ export function addTile(counts, tile, squares) {
 
 // Each bin is its own cell. Outside: has records, centre not in range (drawn when count >= outsideMin).
 // Gap: centre in range, no records. Confirmed (counted, not drawn): centre in range, with records.
-export function classify(counts, fc, size, { outsideMin = 1 } = {}) {
-  const test = inside(fc), box = bbox(fc), cells = [];
-  let total = 0, outRecords = 0, confirmed = 0, gaps = 0;
+// With coverage (a polygon FeatureCollection) bins centred outside it are 'unmapped': neutral cells, left out of every percentage.
+export function classify(counts, fc, size, { outsideMin = 1, coverage = null } = {}) {
+  const test = inside(fc), box = bbox(fc), cells = [], covered = coverage && inside(coverage);
+  let total = 0, outRecords = 0, confirmed = 0, gaps = 0, unmapped = 0;
   for (const [k, count] of counts) {
     const [i, j] = k.split(',').map(Number), [x, y] = centre(i, j, size);
+    if (covered && !covered(x, y)) {
+      unmapped += count; cells.push({ status: 'unmapped', count, ...cellBox(i, j, size) }); continue;
+    }
     total += count;
     if (test(x, y)) confirmed++;
     else { outRecords += count; if (count >= outsideMin) cells.push({ status: 'outside', count, ...cellBox(i, j, size) }); }
@@ -74,13 +80,17 @@ export function classify(counts, fc, size, { outsideMin = 1 } = {}) {
       const [x, y] = centre(i, j, size);
       if (test(x, y)) { gaps++; cells.push({ status: 'gap', count: 0, ...cellBox(i, j, size) }); }
     }
-  return { cells, total, confirmed, gaps, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
+  return { cells, total, unmapped, confirmed, gaps, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
 }
 const cellBox = (i, j, size) => ({ w: -180 + i * size, s: 90 - (j + 1) * size, e: -180 + (i + 1) * size, n: 90 - j * size });
 
-export const summaryLine = r => r.total
-  ? `${Math.round(r.outsidePct)}% of records fall outside this range; ${Math.round(r.gapPct)}% of the range has no records`
-  : 'No GBIF records with coordinates found around this range.';
+// ref names what was compared ("official outline", "your draft"); covered names the coverage area when the check was restricted to it.
+export const summaryLine = (r, ref, covered) => {
+  const lead = ref ? `vs ${ref}: ` : '', note = covered ? ` Compared within the source's coverage (${covered}); bins outside it are not mapped by this source.` : '';
+  return (r.total
+    ? `${lead}${Math.round(r.outsidePct)}% of records fall outside this range; ${Math.round(r.gapPct)}% of the range has no records.`
+    : `${lead}No GBIF records with coordinates found around this range.`) + note;
+};
 
 export const gbifCellUrl = (key, c) =>
   `https://www.gbif.org/occurrence/search?taxon_key=${encodeURIComponent(key)}&geometry=${encodeURIComponent(`POLYGON((${c.w} ${c.s},${c.e} ${c.s},${c.e} ${c.n},${c.w} ${c.n},${c.w} ${c.s}))`)}`;

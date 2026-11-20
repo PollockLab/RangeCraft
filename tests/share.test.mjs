@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { buildHash, parseHash } from '../src/share.js';
 
 test('round trip', () => {
-  const s = { taxon: '2427072', ranges: ['2427072/usgs-gap'], official: true, sdm: false, occ: false, agree: true, at: [4, 50.1234, -80.5] };
+  const s = { taxon: '2427072', ranges: ['2427072/usgs-gap'], official: true, sdm: false, rc: true, occ: false, agree: true, at: [4, 50.1234, -80.5] };
   const h = buildHash(s);
-  assert.equal(h, '#taxon=2427072&ranges=2427072/usgs-gap&official=1&occ=0&at=4.00/50.1234/-80.5000');
+  assert.equal(h, '#taxon=2427072&ranges=2427072/usgs-gap&official=1&rc=1&occ=0&at=4.00/50.1234/-80.5000');
   assert.deepEqual(parseHash(h), { ...s, at: [4, 50.1234, -80.5] });
 });
 
 test('defaults and legacy #taxon= links', () => {
-  assert.deepEqual(parseHash('#taxon=1'), { taxon: '1', official: false, sdm: false, occ: true, agree: true });
+  assert.deepEqual(parseHash('#taxon=1'), { taxon: '1', official: false, sdm: false, rc: false, occ: true, agree: true });
 });
 
 test('malformed input is dropped', () => {

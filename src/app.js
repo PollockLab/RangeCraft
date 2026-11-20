@@ -23,7 +23,7 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 const setLegend = initLegend(map);
-const rangeCheck = initRangeCheck({ map, state, onChange: () => updateLegend(), drawing: () => ['polygon', 'freehand'].includes(draw?.mode()) });
+const rangeCheck = initRangeCheck({ map, state, onChange: () => updateLegend(), drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
 const say = t => { $('msg').textContent = t; };
 const mapReady = new Promise(res => map.once('load', res));
 
@@ -44,7 +44,7 @@ const syncTools = () => {
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); };
+const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); rangeCheck.refresh(); };
 const reshape = initReshape({ draw: () => draw, say });
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard, reshape.apply, () => reshape.reset()); syncTools(); });
 $('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
@@ -150,7 +150,7 @@ const fmtScore = (s, r) => {
   if (s.window_all) bits.push(`${Math.round((s.inside_all / s.window_all) * 100)}% of all nearby GBIF records inside`);
   bits.push(s.window_post ? `${s.inside_post}/${s.window_post} records since edit inside` : 'no records since edit yet');
   if (s.skill != null) bits.push(`skill ${Number(s.skill).toFixed(2)} (new records inside vs expected by chance)`);
-  if (r.edit_date) bits.push(`edited ${r.edit_date}`);
+  if (r.edit_date) bits.push(`added ${r.edit_date}${r.identity === 'source' && r.created && r.created !== r.edit_date ? ` (source ${r.created})` : ''}`);
   return bits.join(', ');
 };
 
@@ -179,6 +179,7 @@ async function showVersions(fit = true) {
     const cb = Object.assign(document.createElement('input'), { type: 'checkbox', id: `v-${r.id}`, checked: true });
     cb.dataset.color = color;
     cb.dataset.file = r.file;
+    cb.dataset.author = r.display ?? shownName(r.author);
     cb.dataset.label = `${shownName(r.author)}, ${r.created}`;
     const lab = document.createElement('label');
     lab.htmlFor = cb.id;
@@ -201,10 +202,10 @@ async function showVersions(fit = true) {
     more.append(sc);
     const ex = expertiseLine(findExpert(state.experts, r.author), state.taxon.key);
     if (ex) more.append(ex);
-    li.append(row, more);
+    li.append(row);
     loadRange(r.file).then(fc => {
-      if (fc.properties?.coverage) more.append(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
-    }).catch(() => {});
+      if (fc.properties?.coverage) li.append(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
+    }).catch(() => {}).finally(() => li.append(more));
     return li;
   }));
   rs.forEach((r, i) => toggleRange(r, COLORS[i % COLORS.length], true).catch(e => say(e.message)));
@@ -345,6 +346,7 @@ async function loadOfficialMatch(taxon) {
 }
 
 $('official-load').addEventListener('click', () => showOfficial());
+$('rc-toggle').addEventListener('change', writeHash);
 async function showOfficial({ fit = true } = {}) {
   const o = state.official, taxon = state.taxon;
   say('Loading official outline...');
@@ -361,6 +363,7 @@ async function showOfficial({ fit = true } = {}) {
     say('Official outline shown (dashed), reference only.');
     updateLegend();
     writeHash();
+    rangeCheck.refresh();
   } catch (e) { say(e.message); }
 }
 $('sdm-toggle').addEventListener('change', async e => {
@@ -439,7 +442,7 @@ tabs.forEach(([t], i) => {
 
 // ---- boot ----
 initSearch($('q'), $('results'), selectTaxon);
-initGroups({ chips: $('chips'), list: $('group-list'), load: async () => speciesByGroup(await loadIndex()), onSelect: selectTaxon, onSearch: () => $('q').focus() });
+initGroups({ chips: $('chips'), note: $('chips-note'), list: $('group-list'), load: async () => speciesByGroup(await loadIndex()), onSelect: selectTaxon, onSearch: () => $('q').focus() });
 // ---- shareable links: the hash mirrors the view, so the address bar is always a link to it ----
 let restoring = false;
 function writeHash() {
@@ -449,7 +452,7 @@ function writeHash() {
   const c = map.getCenter();
   const h = buildHash({
     taxon: state.taxon.key, ranges: on.length < boxes.length ? on : null,
-    official: !!state.official?.fc, sdm: $('sdm-toggle').checked,
+    official: !!state.official?.fc, sdm: $('sdm-toggle').checked, rc: $('rc-toggle').checked,
     occ: $('occ-toggle').checked, agree: $('agree-toggle').checked, at: [map.getZoom(), c.lat, c.lng],
   });
   if (h !== location.hash) history.replaceState(null, '', h);
@@ -470,6 +473,7 @@ async function fromHash() {
     await state.officialReady;
     if (s.official && state.official) await showOfficial({ fit: !s.at });
     if (s.sdm && state.official) { $('sdm-toggle').checked = true; $('sdm-toggle').dispatchEvent(new Event('change')); }
+    if (s.rc) { $('rc-toggle').checked = true; $('rc-toggle').dispatchEvent(new Event('change')); }
     if (s.at) map.jumpTo({ zoom: s.at[0], center: [s.at[2], s.at[1]] });
   } catch (e) { say(`Could not load taxon ${s.taxon}: ${e.message}`); }
   finally { restoring = false; updateLegend(); writeHash(); lastHash = location.hash; }
