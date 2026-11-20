@@ -18,10 +18,18 @@ const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
 const state = { taxon: null, index: null, experts: null, shown: new Set(), official: null, copy: null }; // copy: { id, derived } while the editor holds an edited copy of a community range
 
+const narrow = matchMedia('(max-width: 700px)').matches, touch = matchMedia('(pointer: coarse)').matches;
 const map = new maplibregl.Map({
-  container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: [0, 20], zoom: 1.5,
+  container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: [0, 20], zoom: 1.5, attributionControl: false,
 });
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
+const attrib = new maplibregl.AttributionControl({ compact: narrow });
+map.addControl(attrib);
+// Start collapsed so it stays clear of the legend; MapLibre re-opens it when sources add attributions, so collapse again once settled.
+const collapseAttrib = () => { const c = attrib._container; c.removeAttribute('open'); c.classList.remove('maplibregl-compact-show'); };
+if (narrow) map.once('idle', () => setTimeout(collapseAttrib, 0));
+if (!touch) map.addControl(new maplibregl.NavigationControl(), 'top-right'); // touch: pinch zooms, and the toolbar needs the width
+// Leave room for the toolbar (top) so a fitted range is not hidden under it.
+const fitPad = narrow ? { top: 70, bottom: 20, left: 20, right: 20 } : 40;
 
 const setLegend = initLegend(map);
 const rangeCheck = initRangeCheck({ map, state, onChange: () => updateLegend(), drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
@@ -38,10 +46,13 @@ const HINTS = {
   cut: 'Draw around the area to cut away (click to start, click again to finish). Esc cancels.',
   select: 'Click a shape to select it, then drag it or its vertices. Delete removes it.',
 };
+const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Done (or the first point).' : HINTS[m]?.replace(' Esc cancels.', ' Tap Cancel to stop.').replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap');
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
-  $('hint').textContent = HINTS[draw?.mode()] ?? '';
-  $('hint').dataset.idle = !HINTS[draw?.mode()];
+  const m = draw?.mode();
+  $('hint').textContent = (touch ? touchHint(m) : HINTS[m]) ?? '';
+  $('hint').dataset.idle = !HINTS[m];
+  $('draw-actions').hidden = !touch || !HINTS[m] || m === 'select';
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
@@ -58,6 +69,8 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && draw.mode() !== 'static') setTool('static');
   else if ((e.key === 'Delete' || e.key === 'Backspace') && draw.removeSelected()) e.preventDefault();
 });
+$('draw-done').addEventListener('click', () => draw?.finish());
+$('draw-cancel').addEventListener('click', () => setTool('static'));
 $('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
 
 // Load GeoJSON from a file input or a drop on the map; replaces what is in the editor.
@@ -118,7 +131,7 @@ async function fitRanges(rs) {
   const taxon = state.taxon, b = new maplibregl.LngLatBounds();
   const walk = c => (typeof c[0] === 'number' ? b.extend(c) : c.forEach(walk));
   try { for (const r of rs) for (const f of (await loadRange(r.file)).features ?? []) walk(f.geometry.coordinates); } catch { return; }
-  if (state.taxon === taxon && !b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0, maxZoom: 6 });
+  if (state.taxon === taxon && !b.isEmpty()) map.fitBounds(b, { padding: fitPad, duration: 0, maxZoom: 6 });
 }
 
 function updateLegend() {
@@ -364,7 +377,7 @@ async function showOfficial({ fit = true } = {}) {
     $('official-load').hidden = true;
     const b = new maplibregl.LngLatBounds();
     for (const f of fc.features) f.geometry.coordinates.flat(f.geometry.type === 'Polygon' ? 1 : 2).forEach(c => b.extend(c));
-    if (fit && !b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0 });
+    if (fit && !b.isEmpty()) map.fitBounds(b, { padding: fitPad, duration: 0 });
     say('Official outline shown (dashed), reference only.');
     updateLegend();
     writeHash();
