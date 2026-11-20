@@ -1,19 +1,145 @@
 [
   {
-    "taxonKey": 10806364,
+    "taxonKey": 2422872,
     "voters": [
-      "Wietze"
+      "source:USGS GAP"
     ],
-    "consensus_area_km2": 3374939.5,
+    "consensus_area_km2": 3039682.4,
     "contested_area_km2": 0,
     "agreement_index": 1.0
   },
   {
     "taxonKey": 2427072,
     "voters": [
-      "Wietze"
+      "source:USGS GAP"
     ],
-    "consensus_area_km2": 3986381.1,
+    "consensus_area_km2": 1742381.8,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2428182,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 3188812.7,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2431951,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 2515987.7,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2433407,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 2921363.4,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2433462,
+    "voters": [
+      "source:Fisheries and Oceans Canada"
+    ],
+    "consensus_area_km2": 171764.0,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2433670,
+    "voters": [
+      "source:Fisheries and Oceans Canada"
+    ],
+    "consensus_area_km2": 8374.1,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2435263,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 916979.9,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2439838,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 7278306.8,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2441905,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 5546402.3,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2457522,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 5869831.9,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2480446,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 7693385.8,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2482593,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 5313803.2,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 2497541,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 4597653.6,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 5218855,
+    "voters": [
+      "source:USGS GAP"
+    ],
+    "consensus_area_km2": 834797.8,
+    "contested_area_km2": 0,
+    "agreement_index": 1.0
+  },
+  {
+    "taxonKey": 9789983,
+    "voters": [
+      "source:Fisheries and Oceans Canada"
+    ],
+    "consensus_area_km2": 1773461.6,
     "contested_area_km2": 0,
     "agreement_index": 1.0
   }

@@ -148,6 +148,8 @@ def expert_entry(author: str, ranges: list, cache: dict, offline: bool) -> dict:
 def build(index: list, cache: dict, offline: bool) -> list:
     by_author: dict = {}
     for r in sorted(index, key=lambda r: (r["edit_date"], r["id"])):
+        if r.get("identity") == "source":
+            continue  # published datasets are not people
         by_author.setdefault(r["author"], []).append(r)
     return [expert_entry(a, rs, cache, offline) for a, rs in sorted(by_author.items())]
 

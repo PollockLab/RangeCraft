@@ -31,6 +31,7 @@ from rangelib import (
     credit,
     exportable,
     git_origin,
+    imported_source,
     load_range,
     skill,
     superseded,
@@ -90,6 +91,8 @@ def main() -> int:
             continue
         m = rng["meta"]
         git_author, identity, edit_date = git_origin(f)
+        if src := imported_source(m):
+            git_author, identity = f"source:{src}", "source"
         items.append({
             "id": f"{m['taxonKey']}/{f.stem}", "taxonKey": int(m["taxonKey"]), "meta": m,
             "file": rel, "geometry": rng["geometry"], "git_author": git_author, "identity": identity,
