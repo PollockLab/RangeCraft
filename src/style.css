@@ -119,3 +119,6 @@ footer p { margin:.3rem 0; }
 .maplibregl-popup-content { color:#1b1f23; }
 .maplibregl-popup-content a { display:block; margin-top:.2rem; }
 .linkbtn { margin:0 0 .2rem 1.4rem; padding:0; min-height:0; border:0; background:none; color:var(--accent); font-size:.8rem; text-decoration:underline; }
+#intro p { margin:.2rem 0 .4rem; font-size:.85rem; }
+.examples { display:flex; gap:.3rem; flex-wrap:wrap; margin-bottom:.3rem; }
+.example { min-height:0; padding:.2rem .6rem; font-size:.8rem; }
