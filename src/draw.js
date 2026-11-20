@@ -11,7 +11,7 @@ export function polygonsOf(gj) {
   return geoms.flatMap(g => g?.type === 'Polygon' ? [g] : g?.type === 'MultiPolygon' ? g.coordinates.map(coordinates => ({ type: 'Polygon', coordinates })) : []);
 }
 
-export function initDraw(map, onSelect = () => {}) {
+export function initDraw(map, onSelect = () => {}, onChange = () => {}) {
   const td = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
     modes: [
@@ -25,18 +25,22 @@ export function initDraw(map, onSelect = () => {}) {
   let selected = null;
   td.on('select', id => { selected = id; onSelect(id); });
   td.on('deselect', () => { selected = null; onSelect(null); });
+  td.on('finish', () => onChange());
+  td.on('change', (_ids, type) => type !== 'update' && onChange());
   return {
     mode: () => td.getMode(),
     setMode: m => td.setMode(m),
     // Finished polygons only, not helper points or the one being drawn.
     all: () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing),
-    removeSelected() { if (selected == null) return false; td.removeFeatures([selected]); selected = null; onSelect(null); return true; },
+    removeSelected() { if (selected == null) return false; td.removeFeatures([selected]); selected = null; onSelect(null); onChange(); return true; },
     // Replace the store with the polygons in gj; returns how many were added.
     load(gj) {
       const polys = polygonsOf(gj);
       td.clear();
+      onChange();
       const res = td.addFeatures(polys.map(geometry => ({ type: 'Feature', geometry, properties: { mode: 'polygon' } })));
       const bad = res.filter(r => !r.valid);
+      onChange();
       if (bad.length) throw new Error(`${bad.length} of ${polys.length} polygons are invalid: ${bad[0].reason}`);
       return polys.length;
     },
