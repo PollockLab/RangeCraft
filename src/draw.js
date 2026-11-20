@@ -5,8 +5,8 @@ import { createUndo } from './undo.js';
 import { crowded } from './mode.js';
 import { TerraDrawMapLibreGLAdapter } from 'https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.module.js';
 
-// Terra Draw's polygon mode hard-codes a "Feature has holes" check. Holes are plain GeoJSON and render and survive vertex edits
-// (only the outer ring is editable), so keep the base checks and skip the mode's own.
+// Terra Draw's polygon mode hard-codes a "Feature has holes" check. Holes are plain GeoJSON and render (only the outer ring
+// is editable; initDraw puts them back after each edit), so keep the base checks and skip the mode's own.
 class HolePolygonMode extends TerraDrawPolygonMode {
   validateFeature(f) { return this.validateModeFeature(f, () => ({ valid: true })); }
 }
@@ -60,7 +60,19 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
     if (f && td.getMode() === 'select') { swapping = true; td.deselectFeature(f.id); td.selectFeature(f.id); swapping = false; selected = f.id; onSelect(f.id); }
   };
   map.on('zoomend', setHandles);
-  td.on('select', id => { if (swapping) return; selected = id; queueMicrotask(setHandles); dimOcc(true); onSelect(id); }); // microtask: select() reads its flags before this fires and builds points after
+  // Terra Draw 1.39 rewrites an edited polygon as its outer ring alone, so restore the holes of the selected shape after each edit.
+  // A whole-shape drag moves the outer ring in Web Mercator, so the holes shift by the same screen offset.
+  let rings = null;
+  const keepHoles = (id, action) => {
+    const now = td.getSnapshot().find(x => x.id === id)?.geometry.coordinates;
+    if (now && rings?.length > 1 && now.length === 1) {
+      const a = map.project(rings[0][0]), b = map.project(now[0][0]), same = new Map(rings[0].map((c, i) => [String(c), now[0][i]])); // corners a hole shares with the outer ring follow it exactly, so touches stay touches
+      const move = c => { if (action !== 'dragFeature') return c; if (same.has(String(c))) return same.get(String(c)); const p = map.project(c), q = map.unproject([p.x + b.x - a.x, p.y + b.y - a.y]); return [q.lng, q.lat]; };
+      td.updateFeatureGeometry(id, { type: 'Polygon', coordinates: [now[0], ...rings.slice(1).map(r => r.map(move))] });
+    }
+    rings = td.getSnapshot().find(x => x.id === id)?.geometry.coordinates ?? null;
+  };
+  td.on('select', id => { if (swapping) return; selected = id; rings = td.getSnapshot().find(x => x.id === id)?.geometry.coordinates ?? null; queueMicrotask(setHandles); dimOcc(true); onSelect(id); }); // microtask: select() reads its flags before this fires and builds points after
   td.on('deselect', () => { if (swapping) return; selected = null; dimOcc(false); onSelect(null); });
   // Undo/redo: snapshots of the finished polygons (never helper points), recorded when a change ends.
   const undo = createUndo(50);
@@ -76,7 +88,7 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   // Add/Cut tools draw with the freehand mode; the finished sketch is handed to onSketch(op, polygon) and removed.
   let sketchOp = null;
   td.on('finish', (id, ctx) => {
-    if (!sketchOp) { undo.record(snap()); onChange(); if (ctx?.action === 'draw') onDrawn(); return; }
+    if (!sketchOp) { if (ctx?.mode === 'select') keepHoles(id, ctx.action); undo.record(snap()); onChange(); if (ctx?.action === 'draw') onDrawn(); return; }
     const f = td.getSnapshot().find(x => x.id === id);
     td.removeFeatures([id]);
     if (f) onSketch(sketchOp, f.geometry);
