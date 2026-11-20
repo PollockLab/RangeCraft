@@ -33,7 +33,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial }) {
     state.copy = null;
     draw().load({ type: 'FeatureCollection', features: [] });
     state.patch = { base: slug, baseFc, shapes, parent };
-    if (!state.official?.fc) showOfficial();
+    if (!state.official?.fc) await showOfficial();
     render(); sync();
     $('t-cut').disabled = false; $('t-cut').title = 'Cut area: sketch a shape to remove from the official range (saved as a cut shape)';
     $('official-edit').textContent = 'Stop patch editing';

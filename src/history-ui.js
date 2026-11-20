@@ -33,9 +33,11 @@ export function initHistory({ map, state, say }) {
     const pr = fc.properties ?? {}, ops = op => multi({ features: fc.features.filter(f => f.properties?.op === op) });
     // A patch's diff is its own shapes: adds green, cuts red.
     const d = pr.basis === 'official-patch' ? { added: ops('add'), removed: ops('cut'), addedKm2: areaKm2(ops('add')), removedKm2: areaKm2(ops('cut')) } : revisionDiff(pfc, fc, polygonClipping);
-    const full = pr.message || String(pr.sources ?? '').split('\n')[0], msg = full.length > 140 ? `${full.slice(0, 139)}…` : full;
-    const b = el('button', { type: 'button', className: 'rev', title: full }, `Revision by ${shownName(r.author)}, ${r.created}: '${msg || 'no message'}'. `, el('span', { className: 'muted', textContent: n.parent || pr.basis === 'official-patch' ? changeText(d) : 'Initial range.' }));
-    b.addEventListener('click', () => { overlay(d); onPick(b); say(`Green: added vs ${n.parent ? 'its parent' : 'nothing'}. Red: removed.`); });
+    const src = String(pr.sources ?? '').split('\n')[0], edit = n.parent || pr.basis === 'official-patch';
+    // An unmessaged root is the first upload: its sources are a citation, not a change message, so they go in the tooltip.
+    const head = pr.message ? `Revision by ${shownName(r.author)}, ${r.created}: '${pr.message.length > 140 ? `${pr.message.slice(0, 139)}…` : pr.message}'. ` : `${edit ? 'Revision' : 'Initial range'} by ${shownName(r.author)}, ${r.created}. `;
+    const b = el('button', { type: 'button', className: 'rev', title: pr.message || src }, head, el('span', { className: 'muted', textContent: edit ? changeText(d) : '' }));
+    b.addEventListener('click', () => { overlay(d); onPick(b); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); });
     return b;
   }
 
@@ -65,7 +67,8 @@ export function initHistory({ map, state, say }) {
       b.closest('li').append(panel);
       b.setAttribute('aria-expanded', true);
       open = { panel, button: b };
-      fill(panel, r).catch(e => say(e.message));
+      // Scroll the log clear of the sticky propose card that covers the bottom of the side panel.
+      fill(panel, r).then(() => { const over = panel.getBoundingClientRect().bottom - document.getElementById('propose-card').getBoundingClientRect().top; if (over > 0) document.getElementById('panel').scrollBy({ top: over + 8 }); }).catch(e => say(e.message));
     });
     return b;
   }
