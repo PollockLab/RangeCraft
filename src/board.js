@@ -4,6 +4,8 @@ const num = n => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : 
 const ORCID = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/, INAT = /^[A-Za-z0-9_-]{3,40}$/;
 const link = (href, text) => el('a', { href, textContent: text, rel: 'noopener', target: '_blank' });
 
+// Unverified commit names carry a namespace prefix so they cannot claim a GitHub login's credit.
+export const shownName = a => String(a ?? '').replace(/^unverified:/, '');
 export const findExpert = (experts, author) => experts.find(e => e.author?.toLowerCase() === String(author).toLowerCase());
 
 function ids(e) {
@@ -28,7 +30,7 @@ export function renderBoard(experts, { table, empty }) {
   empty.hidden = rows.length > 0;
   table.hidden = !rows.length;
   table.tBodies[0].replaceChildren(...rows.map(e => el('tr', {},
-    el('td', { textContent: e.display || e.author }),
+    el('td', { textContent: e.display || shownName(e.author) }),
     el('td', {}, ...ids(e)),
     el('td', { textContent: e.works_total ?? '-' }),
     el('td', { textContent: e.h_index ?? '-' }),

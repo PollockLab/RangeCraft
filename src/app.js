@@ -3,7 +3,7 @@ import { initSearch } from './search.js';
 import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } from './export.js';
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
-import { renderBoard, findExpert, expertiseLine } from './board.js';
+import { renderBoard, findExpert, expertiseLine, shownName } from './board.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -89,7 +89,7 @@ async function showVersions() {
     lab.style.fontWeight = '400';
     lab.innerHTML = '<span class="swatch" aria-hidden="true"></span> ';
     lab.firstChild.style.cssText = `display:inline-block;width:.8rem;height:.8rem;background:${color};border-radius:3px`;
-    lab.append(`${r.author}, ${r.created}`);
+    lab.append(`${shownName(r.author)}, ${r.created}`);
     const sc = document.createElement('div');
     sc.className = 'muted';
     sc.textContent = fmtScore(r.score, r);
