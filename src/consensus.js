@@ -14,7 +14,7 @@ export async function loadConsensusSummary(key) {
 export const shareFill = ['step', ['get', 'share'], PALETTE[0], 0.2, PALETTE[1], 0.4, PALETTE[2], 0.6, PALETTE[3], 0.8, PALETTE[4]];
 
 const km = v => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v)));
-export const summaryText = s => s
-  ? `Agreement index ${Number(s.agreement_index).toFixed(2)} · contested area ${km(s.contested_area_km2)} km² · ${s.voters} experts`
+export const summaryText = (s, noun = 'experts') => s
+  ? `Agreement index ${Number(s.agreement_index).toFixed(2)} · contested area ${km(s.contested_area_km2)} km² · ${s.voters} ${noun}`
   : '';
-export const kOfN = p => `${p.agree} of ${p.voters} experts agree`;
+export const kOfN = (p, noun = 'experts') => `${p.agree} of ${p.voters} ${noun} agree`;

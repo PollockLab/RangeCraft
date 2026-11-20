@@ -7,6 +7,8 @@ import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALE
 import { initDraw } from './draw.js';
 import { renderBoard, findExpert, expertiseLine, shownName } from './board.js';
 import { buildHash, parseHash } from './share.js';
+import { initGroups, speciesByGroup } from './groups.js';
+import { initLegend } from './legend.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -17,15 +19,32 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+const setLegend = initLegend(map);
 const say = t => { $('msg').textContent = t; };
 const mapReady = new Promise(res => map.once('load', res));
 
 // ---- drawing tools ----
 let draw;
 const TOOLS = { polygon: 't-polygon', freehand: 't-freehand', select: 't-select' };
-const syncTools = () => { for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m); };
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }); });
-for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => { if (draw) { draw.setMode(m); syncTools(); } });
+const HINTS = {
+  polygon: 'Click to add points, click the first point to finish. Esc cancels.',
+  freehand: 'Click to start, move to draw, click again to finish. Esc cancels.',
+  select: 'Click a shape to select it, then drag it or its vertices. Delete removes it.',
+};
+const syncTools = () => {
+  for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
+  $('hint').textContent = HINTS[draw?.mode()] ?? 'Pick a tool, then draw on the map.';
+  $('hint').dataset.idle = !HINTS[draw?.mode()];
+};
+const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }); syncTools(); });
+syncTools();
+for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => setTool(m));
+addEventListener('keydown', e => {
+  if (!draw || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.key === 'Escape' && draw.mode() !== 'static') setTool('static');
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && draw.removeSelected()) e.preventDefault();
+});
 $('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
 
 // Load GeoJSON from a file input or a drop on the map; replaces what is in the editor.
@@ -50,17 +69,19 @@ function setRustgis(file) {
 }
 
 // ---- taxon selection ----
-async function selectTaxon({ key, name }) {
+async function selectTaxon({ key, name }, { fit = true } = {}) {
   state.taxon = { key: String(key), name };
   setRustgis(null);
   $('selected').textContent = `${name} (GBIF ${key})`;
   $('share').hidden = false;
+  $('q').value = name;
   await mapReady;
   setOccurrences();
   setOfficialUi(null);
   state.officialReady = loadOfficialMatch(state.taxon);
   loadAgreement(state.taxon);
-  await showVersions();
+  await showVersions(fit);
+  updateLegend();
   writeHash();
 }
 
@@ -76,6 +97,26 @@ function clearRanges() {
   for (const s of Object.keys(map.getStyle().sources).filter(s => s.startsWith('range-'))) map.removeSource(s);
   state.shown.clear();
 }
+
+async function fitRanges(rs) {
+  const taxon = state.taxon, b = new maplibregl.LngLatBounds();
+  const walk = c => (typeof c[0] === 'number' ? b.extend(c) : c.forEach(walk));
+  try { for (const r of rs) for (const f of (await loadRange(r.file)).features ?? []) walk(f.geometry.coordinates); } catch { return; }
+  if (state.taxon === taxon && !b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0, maxZoom: 6 });
+}
+
+function updateLegend() {
+  const items = [];
+  if (state.taxon) {
+    if ($('occ-toggle').checked) items.push({ label: 'GBIF occurrences', swatch: 'linear-gradient(90deg,#ffe066,#e5383b)' });
+    if (state.official?.fc) items.push({ label: 'Official range (reference)', dashed: true });
+    if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
+    for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
+    if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
+  }
+  setLegend(items);
+}
+$('panel').addEventListener('change', updateLegend);
 
 async function toggleRange(r, color, on) {
   const id = `range-${r.id}`;
@@ -100,17 +141,26 @@ const fmtScore = (s, r) => {
   return bits.join(', ');
 };
 
-async function showVersions() {
+async function showVersions(fit = true) {
   clearRanges();
   const ul = $('versions');
   state.index ??= await loadIndex();
   state.experts ??= await loadExperts();
   const rs = state.index.filter(r => String(r.taxonKey) === state.taxon.key).sort((a, b) => b.created.localeCompare(a.created));
-  if (!rs.length) { ul.innerHTML = '<li class="muted">No community ranges for this species yet. Draw the first one.</li>'; return; }
+  if (!rs.length) {
+    const first = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Draw the first range' });
+    first.addEventListener('click', () => { setTool('polygon'); say('Draw on the map, then propose it in step 4.'); });
+    const li = document.createElement('li');
+    li.append('No community ranges for this species yet. ', first);
+    ul.replaceChildren(li);
+    return;
+  }
   ul.replaceChildren(...rs.map((r, i) => {
     const color = COLORS[i % COLORS.length];
     const li = document.createElement('li');
     const cb = Object.assign(document.createElement('input'), { type: 'checkbox', id: `v-${r.id}`, checked: true });
+    cb.dataset.color = color;
+    cb.dataset.label = `${shownName(r.author)}, ${r.created}`;
     const lab = document.createElement('label');
     lab.htmlFor = cb.id;
     lab.style.fontWeight = '400';
@@ -130,9 +180,13 @@ async function showVersions() {
     const ex = expertiseLine(findExpert(state.experts, r.author), state.taxon.key);
     if (ex) li.append(ex);
     li.append(edit);
+    loadRange(r.file).then(fc => {
+      if (fc.properties?.coverage) edit.before(Object.assign(document.createElement('div'), { className: 'muted cov', textContent: fc.properties.coverage }));
+    }).catch(() => {});
     return li;
   }));
   rs.forEach((r, i) => toggleRange(r, COLORS[i % COLORS.length], true).catch(e => say(e.message)));
+  if (fit) fitRanges(rs);
 }
 
 // ---- export / propose ----
@@ -226,8 +280,9 @@ function setOfficialUi(match) {
   $('official').hidden = !match;
   $('official-load').hidden = false;
   $('sdm-toggle').checked = false;
+  updateLegend();
   if (match) {
-    $('official-note').textContent = `${match.common} (${match.sci}): official expert outline available for reference. Coarse outlines can spill past coastlines.`;
+    $('official-note').textContent = `${match.common} (${match.sci})`;
     $('gbif-out').href = gbifSearchUrl(state.taxon.key);
   }
 }
@@ -254,6 +309,7 @@ async function showOfficial({ fit = true } = {}) {
     for (const f of fc.features) f.geometry.coordinates.flat(f.geometry.type === 'Polygon' ? 1 : 2).forEach(c => b.extend(c));
     if (fit && !b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0 });
     say('Official outline shown (dashed), reference only.');
+    updateLegend();
     writeHash();
   } catch (e) { say(e.message); }
 }
@@ -269,20 +325,29 @@ $('sdm-toggle').addEventListener('change', async e => {
 });
 
 // ---- agreement layer ----
+let noun = 'experts';
 async function loadAgreement(taxon) {
   for (const id of ['agree-fill']) if (map.getLayer(id)) map.removeLayer(id);
   if (map.getSource('agree')) map.removeSource('agree');
-  $('agreement').hidden = true;
+  $('agreement').hidden = false;
+  $('agree-body').hidden = true;
+  $('agree-empty').hidden = false;
+  state.index ??= await loadIndex();
   const [fc, sum] = await Promise.all([loadConsensus(taxon.key), loadConsensusSummary(taxon.key)]);
   if (state.taxon !== taxon || !fc) return;
+  const n = fc.properties?.voters?.length ?? fc.features[0].properties.voters;
+  if (n < 2) return;
   map.addSource('agree', { type: 'geojson', data: fc });
   map.addLayer({ id: 'agree-fill', type: 'fill', source: 'agree', paint: { 'fill-color': shareFill, 'fill-opacity': 0.55 },
     layout: { visibility: $('agree-toggle').checked ? 'visible' : 'none' } }, 'occ');
-  const n = fc.properties?.voters?.length ?? fc.features[0].properties.voters;
-  $('agree-summary').textContent = summaryText(sum);
-  $('agree-legend').replaceChildren(`k of ${n} experts agree: few `, ...PALETTE.map(c => Object.assign(document.createElement('span'), {
+  const rs = state.index.filter(r => String(r.taxonKey) === taxon.key);
+  noun = rs.length && rs.every(r => r.identity === 'source') ? 'sources' : 'experts';
+  $('agree-summary').textContent = summaryText(sum, noun);
+  $('agree-legend').replaceChildren(`k of ${n} ${noun} agree: few `, ...PALETTE.map(c => Object.assign(document.createElement('span'), {
     style: `display:inline-block;width:1rem;height:.8rem;background:${c}` })), ' all');
-  $('agreement').hidden = false;
+  $('agree-body').hidden = false;
+  $('agree-empty').hidden = true;
+  updateLegend();
 }
 $('agree-toggle').addEventListener('change', e => {
   if (map.getLayer('agree-fill')) map.setLayoutProperty('agree-fill', 'visibility', e.target.checked ? 'visible' : 'none');
@@ -290,12 +355,19 @@ $('agree-toggle').addEventListener('change', e => {
 });
 map.on('click', 'agree-fill', e => {
   if (['polygon', 'freehand'].includes(draw?.mode())) return;
-  new maplibregl.Popup().setLngLat(e.lngLat).setText(kOfN(e.features[0].properties)).addTo(map);
+  new maplibregl.Popup().setLngLat(e.lngLat).setText(kOfN(e.features[0].properties, noun)).addTo(map);
 });
 
-// ---- how it works ----
+// ---- how it works, saved details ----
 if (localStorage.getItem('rc-how') === 'off') $('how').hidden = true;
 $('how-close').addEventListener('click', () => { $('how').hidden = true; localStorage.setItem('rc-how', 'off'); });
+const ME = ['author', 'github', 'orcid', 'inat'];
+try {
+  const me = JSON.parse(localStorage.getItem('rc-me') || '{}');
+  for (const k of ME) if (typeof me[k] === 'string') $(k).value = me[k];
+  $('me').open = !!me.author;
+} catch {}
+$('me').addEventListener('input', () => { try { localStorage.setItem('rc-me', JSON.stringify(Object.fromEntries(ME.map(k => [k, $(k).value])))); } catch {} });
 
 // ---- tabs ----
 const tabs = [['tab-map', 'view-map'], ['tab-board', 'view-board']];
@@ -319,6 +391,7 @@ tabs.forEach(([t], i) => {
 
 // ---- boot ----
 initSearch($('q'), $('results'), selectTaxon);
+initGroups({ chips: $('chips'), list: $('group-list'), load: async () => speciesByGroup(await loadIndex()), onSelect: selectTaxon, onSearch: () => $('q').focus() });
 // ---- shareable links: the hash mirrors the view, so the address bar is always a link to it ----
 let restoring = false;
 function writeHash() {
@@ -341,8 +414,7 @@ async function fromHash() {
   restoring = true;
   try {
     const name = await speciesName(s.taxon);
-    $('q').value = name;
-    await selectTaxon({ key: s.taxon, name });
+    await selectTaxon({ key: s.taxon, name }, { fit: !s.at && !s.official });
     if (s.ranges) for (const b of document.querySelectorAll('#versions input[type=checkbox]')) {
       if (!s.ranges.includes(b.id.slice(2)) && b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); }
     }
@@ -352,7 +424,7 @@ async function fromHash() {
     if (s.sdm && state.official) { $('sdm-toggle').checked = true; $('sdm-toggle').dispatchEvent(new Event('change')); }
     if (s.at) map.jumpTo({ zoom: s.at[0], center: [s.at[2], s.at[1]] });
   } catch (e) { say(`Could not load taxon ${s.taxon}: ${e.message}`); }
-  finally { restoring = false; writeHash(); lastHash = location.hash; }
+  finally { restoring = false; updateLegend(); writeHash(); lastHash = location.hash; }
 }
 let lastHash = '';
 addEventListener('hashchange', fromHash);

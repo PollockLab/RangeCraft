@@ -30,8 +30,9 @@ async function json(path, fallback) {
 }
 export const loadIndex = () => json('data/ranges/index.json', []);
 export const loadExperts = () => json('data/experts.json', []);
+// Cached as text so each caller gets its own parsed copy.
+const texts = new Map();
 export async function loadRange(file) {
-  const r = await fetch(file.startsWith('data/') ? file : `data/ranges/${file}`);
-  if (!r.ok) throw new Error(`${file}: ${r.status}`);
-  return r.json();
+  if (!texts.has(file)) texts.set(file, fetch(file.startsWith('data/') ? file : `data/ranges/${file}`).then(r => { if (!r.ok) throw new Error(`${file}: ${r.status}`); return r.text(); }));
+  try { return JSON.parse(await texts.get(file)); } catch (e) { texts.delete(file); throw e; }
 }

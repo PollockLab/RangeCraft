@@ -15,76 +15,107 @@
     <button role="tab" id="tab-map" aria-controls="view-map" aria-selected="true">Map</button>
     <button role="tab" id="tab-board" aria-controls="view-board" aria-selected="false" tabindex="-1">Contributors</button>
   </nav>
+  <button id="share" type="button" hidden title="Copies a link that opens this species with the same layers and map view, e.g. to discuss a range with a colleague">Copy link to this view</button>
 </header>
 
 <main>
   <section id="view-map" role="tabpanel" aria-labelledby="tab-map">
     <aside id="panel">
-      <div id="how">
-        <button id="how-close" type="button" aria-label="Dismiss">Dismiss</button>
-        <strong>How it works</strong>
-        <ol>
-          <li>Pick a species.</li>
-          <li>Draw your range. Compare it with the official outline, which is view-only.</li>
-          <li>Propose. Your range is scored later: new GBIF records landing inside it count for you, records landing outside count against it.</li>
-        </ol>
-        <p class="muted">Experts are recognised by their public record (iNaturalist research-grade observations and IDs, publications), not by points here. Planning aid, not ground truth.</p>
-      </div>
-      <div class="field">
-        <label for="q">Species</label>
-        <input id="q" type="search" autocomplete="off" placeholder="e.g. Danaus plexippus" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
-        <ul id="results" role="listbox" hidden></ul>
-      </div>
-      <p class="muted">RangeCraft complements official range maps. Experts propose edits; the agreement map shows where they converge and where the edge is contested.</p>
-      <p id="selected" class="muted" aria-live="polite">No species selected.</p>
-      <button id="share" type="button" hidden title="Copies a link that opens this species with the same layers and map view, e.g. to discuss a range with a colleague">Copy link to this view</button>
+      <section class="step" aria-labelledby="s1">
+        <h2 id="s1"><span class="n">1</span> Species</h2>
+        <div class="field">
+          <label for="q" class="sr">Species</label>
+          <input id="q" type="search" autocomplete="off" placeholder="Search all species, e.g. Danaus plexippus" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
+          <ul id="results" role="listbox" hidden></ul>
+        </div>
+        <p id="selected" class="muted" aria-live="polite">No species selected.</p>
+        <div id="chips" class="chips" role="group" aria-label="Browse species with ranges by group"></div>
+        <ul id="group-list" class="plain" hidden></ul>
+        <p class="muted">Draw a species' range, compare it with other sources, and propose it for review.</p>
+        <details id="how">
+          <summary>How it works</summary>
+          <ol>
+            <li>Pick a species.</li>
+            <li>Draw your range. Compare it with the official outline, which is view-only.</li>
+            <li>Propose. Your range is scored later: new GBIF records landing inside it count for you, records landing outside count against it.</li>
+          </ol>
+          <button id="how-close" type="button" aria-label="Dismiss how it works">Dismiss how it works</button>
+        </details>
+      </section>
 
-      <div id="official" hidden>
-        <p id="official-note" class="muted"></p>
-        <button id="official-load" type="button">Show official outline (ECCC/IUCN), reference only, not redistributed</button>
-        <label class="check"><input type="checkbox" id="sdm-toggle"> Habitat suitability model (1980-2010), context only</label>
-        <p><a id="gbif-out" target="_blank" rel="noopener" href="#">See records outside this outline on GBIF</a></p>
-      </div>
+      <section class="step" aria-labelledby="s2">
+        <h2 id="s2"><span class="n">2</span> Compare</h2>
+        <label class="check"><input type="checkbox" id="occ-toggle" checked> GBIF occurrences</label>
+        <div id="official" hidden>
+          <p id="official-note" class="muted"></p>
+          <button id="official-load" type="button" title="ECCC/IUCN expert outline: reference only, not redistributed. Coarse outlines can spill past coastlines.">Official range (reference)</button>
+          <label class="check" title="Habitat suitability model, 1980-2010. Context only, not a range."><input type="checkbox" id="sdm-toggle"> Habitat model</label>
+          <p><a id="gbif-out" target="_blank" rel="noopener" href="#">See records outside this outline on GBIF</a></p>
+        </div>
+        <h3>Community ranges</h3>
+        <ul id="versions"><li class="muted">Select a species.</li></ul>
+        <div id="agreement" hidden>
+          <h3>Agreement</h3>
+          <div id="agree-body" hidden>
+            <label class="check"><input type="checkbox" id="agree-toggle" checked> Agreement map</label>
+            <p id="agree-summary" class="muted"></p>
+            <div id="agree-legend" class="muted"></div>
+          </div>
+          <p id="agree-empty" class="muted">Agreement appears when 2+ ranges exist</p>
+        </div>
+      </section>
 
-      <label class="check"><input type="checkbox" id="occ-toggle" checked> Show GBIF occurrences</label>
+      <section class="step" aria-labelledby="s3">
+        <h2 id="s3"><span class="n">3</span> Draw</h2>
+        <div id="tools">
+          <div class="actions" role="group" aria-label="Drawing tools">
+            <button aria-label="Polygon" title="Polygon" id="t-polygon" type="button" aria-pressed="false"><span aria-hidden="true">⬠</span><span class="tx"> Polygon</span></button>
+            <button aria-label="Freehand" title="Freehand" id="t-freehand" type="button" aria-pressed="false"><span aria-hidden="true">✎</span><span class="tx"> Freehand</span></button>
+            <button aria-label="Edit" id="t-select" type="button" aria-pressed="false" title="Select a shape, then drag it or its vertices"><span aria-hidden="true">✥</span><span class="tx"> Edit</span></button>
+            <button aria-label="Delete selected" id="t-delete" type="button" disabled title="Select a shape with Edit first"><span aria-hidden="true">🗑</span><span class="tx"> Delete selected</span></button>
+          </div>
+          <p id="hint" class="muted"></p>
+        </div>
+        <details>
+          <summary>Licence and experts</summary>
+          <p class="muted">Draw your own range. Do not trace or copy the official outline: its license does not allow republishing under CC BY 4.0.</p>
+          <p class="muted">RangeCraft complements official range maps. Experts propose edits; the agreement map shows where they converge and where the edge is contested.</p>
+          <p class="muted">Experts are recognised by their public record (iNaturalist research-grade observations and IDs, publications), not by points here. Planning aid, not ground truth.</p>
+        </details>
+      </section>
 
-      <div id="agreement" hidden>
-        <label class="check"><input type="checkbox" id="agree-toggle" checked> Agreement map</label>
-        <p id="agree-summary" class="muted"></p>
-        <div id="agree-legend" class="muted"></div>
-      </div>
-
-      <h2>Community ranges</h2>
-      <ul id="versions" aria-live="polite"><li class="muted">Select a species.</li></ul>
-
-      <h2>Your range</h2>
-      <p class="muted">Pick a tool, draw on the map, then export or propose it. Polygon corners snap to your own vertices. Freehand suits coarse outlines. Add several polygons for a multi-part range.</p>
-      <div class="actions" role="group" aria-label="Drawing tools">
-        <button id="t-polygon" type="button" aria-pressed="false">Polygon</button>
-        <button id="t-freehand" type="button" aria-pressed="false">Freehand</button>
-        <button id="t-select" type="button" aria-pressed="false" title="Select a shape, then drag it or its vertices">Edit</button>
-        <button id="t-delete" type="button" disabled title="Select a shape with Edit first">Delete selected</button>
-      </div>
-      <p class="muted">Draw your own range. Do not trace or copy the official outline: its license does not allow republishing under CC BY 4.0.</p>
-      <div class="field"><label for="author">Display name</label><input id="author" autocomplete="name"></div>
-      <div class="field"><label for="github">GitHub username (optional)</label><input id="github" autocomplete="username"></div>
-      <div class="field"><label for="orcid">ORCID (optional)</label><input id="orcid" placeholder="0000-0002-1825-0097" autocomplete="off"></div>
-      <div class="field"><label for="inat">iNaturalist username (optional)</label><input id="inat" autocomplete="off"></div>
-      <div class="field"><label for="sources">Sources and evidence (required to propose)</label><textarea id="sources" rows="3" placeholder="Citations, expert knowledge, links"></textarea></div>
-      <div id="relay" hidden>
-        <p id="relay-who" class="muted"></p>
-        <div id="relay-buttons" class="actions"></div>
-        <div id="relay-email" class="field" hidden><label for="relay-mail">Or email a sign-in link (unverified, a maintainer vouches when merging)</label><input id="relay-mail" type="email" autocomplete="email"><button id="relay-mail-send" type="button">Email me a link</button></div>
-        <button id="relay-submit" type="button" class="primary" hidden>Submit</button>
-        <p id="relay-link" role="status"></p>
-      </div>
-      <div class="actions">
-        <button id="export" type="button">Export GeoJSON</button>
-        <label class="btn" title="Load a GeoJSON file into the editor (or drop it on the map), for example one edited in RustGIS">Load file <input id="load-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden></label>
-        <a id="rustgis" hidden target="_blank" rel="noopener" title="Opens the selected community range in RustGIS (snap to coastlines, clip, erase, reshape). Save the result and bring it back with Load file or by dropping it on the map.">Open in RustGIS</a>
-        <button id="propose" type="button" class="primary">Propose edit</button>
-      </div>
-      <p id="msg" role="status" class="muted"></p>
+      <section class="step" aria-labelledby="s4">
+        <h2 id="s4"><span class="n">4</span> Propose</h2>
+        <details id="me">
+          <summary>Your details</summary>
+          <div class="field"><label for="author">Display name</label><input id="author" autocomplete="name"></div>
+          <div class="field"><label for="github">GitHub username (optional)</label><input id="github" autocomplete="username"></div>
+          <div class="field"><label for="orcid">ORCID (optional)</label><input id="orcid" placeholder="0000-0002-1825-0097" autocomplete="off"></div>
+          <div class="field"><label for="inat">iNaturalist username (optional)</label><input id="inat" autocomplete="off"></div>
+        </details>
+        <div class="field"><label for="sources">Sources and evidence (required to propose)</label><textarea id="sources" rows="3" placeholder="Citations, expert knowledge, links"></textarea></div>
+        <div id="relay" hidden>
+          <p id="relay-who" class="muted"></p>
+          <div id="relay-buttons" class="actions"></div>
+          <div id="relay-email" class="field" hidden><label for="relay-mail">Or email a sign-in link (unverified, a maintainer vouches when merging)</label><input id="relay-mail" type="email" autocomplete="email"><button id="relay-mail-send" type="button">Email me a link</button></div>
+          <button id="relay-submit" type="button" class="primary" hidden>Submit</button>
+          <p id="relay-link" role="status"></p>
+        </div>
+        <div class="actions">
+          <button id="export" type="button">Export GeoJSON</button>
+          <label class="btn" title="Load a GeoJSON file into the editor (or drop it on the map), for example one edited in RustGIS">Load file <input id="load-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden></label>
+          <a id="rustgis" hidden target="_blank" rel="noopener" title="Opens the selected community range in RustGIS (snap to coastlines, clip, erase, reshape). Save the result and bring it back with Load file or by dropping it on the map.">Open in RustGIS</a>
+        </div>
+        <div class="actions row"><button id="propose" type="button" class="primary">Propose edit</button></div>
+        <p id="msg" role="status" class="muted"></p>
+      </section>
+      <footer>
+        <details>
+          <summary>How ranges are scored</summary>
+          <p>A range is scored by whether new GBIF records (observed after the edit) land inside it, compared with what chance would give for its area. Drawing the whole world earns nothing.</p>
+        </details>
+        <p>Code: <a href="LICENSE">MIT</a>. Data: <a href="DATA_LICENSE.md">CC BY 4.0</a>. Occurrences from <a href="https://www.gbif.org">GBIF</a>. Basemap by <a href="https://openfreemap.org">OpenFreeMap</a> and OpenStreetMap contributors.</p>
+      </footer>
     </aside>
     <div id="map" aria-label="Map" tabindex="-1"></div>
   </section>
@@ -99,13 +130,6 @@
   </section>
 </main>
 
-<footer>
-  <details>
-    <summary>How ranges are scored</summary>
-    <p>A range is scored by whether new GBIF records (observed after the edit) land inside it, compared with what chance would give for its area. Drawing the whole world earns nothing.</p>
-  </details>
-  <p>Code: <a href="LICENSE">MIT</a>. Data: <a href="DATA_LICENSE.md">CC BY 4.0</a>. Occurrences from <a href="https://www.gbif.org">GBIF</a>. Basemap by <a href="https://openfreemap.org">OpenFreeMap</a> and OpenStreetMap contributors.</p>
-</footer>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script type="importmap">{"imports":{"terra-draw":"https://cdn.jsdelivr.net/npm/terra-draw@1.39.0/dist/terra-draw.module.js"}}</script>
