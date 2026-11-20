@@ -27,7 +27,7 @@ async function json(path, fallback) {
   } catch { return fallback; }
 }
 export const loadIndex = () => json('data/ranges/index.json', []);
-export const loadLeaderboard = () => json('data/leaderboard.json', []);
+export const loadExperts = () => json('data/experts.json', []);
 export async function loadRange(file) {
   const r = await fetch(file.startsWith('data/') ? file : `data/ranges/${file}`);
   if (!r.ok) throw new Error(`${file}: ${r.status}`);
