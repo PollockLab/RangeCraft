@@ -5,6 +5,7 @@ import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from '
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
 import { initDraw } from './draw.js';
 import { renderBoard, findExpert, expertiseLine, shownName } from './board.js';
+import { buildHash, parseHash } from './share.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -51,14 +52,15 @@ function setRustgis(file) {
 async function selectTaxon({ key, name }) {
   state.taxon = { key: String(key), name };
   setRustgis(null);
-  history.replaceState(null, '', `#taxon=${key}`);
   $('selected').textContent = `${name} (GBIF ${key})`;
+  $('share').hidden = false;
   await mapReady;
   setOccurrences();
   setOfficialUi(null);
-  loadOfficialMatch(state.taxon);
+  state.officialReady = loadOfficialMatch(state.taxon);
   loadAgreement(state.taxon);
   await showVersions();
+  writeHash();
 }
 
 function setOccurrences() {
@@ -118,7 +120,7 @@ async function showVersions() {
     sc.className = 'muted';
     sc.textContent = fmtScore(r.score, r);
     const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit a copy' });
-    cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); });
+    cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); writeHash(); });
     edit.addEventListener('click', async () => {
       try { const fc = await loadRange(r.file); draw.load(fc); setRustgis(r.file); say('Loaded into the editor. Modify it, then export or propose.'); }
       catch (e) { say(e.message); }
@@ -158,6 +160,7 @@ $('propose').addEventListener('click', () => {
 
 $('occ-toggle').addEventListener('change', e => {
   if (map.getLayer('occ')) map.setLayoutProperty('occ', 'visibility', e.target.checked ? 'visible' : 'none');
+  writeHash();
 });
 
 // ---- contributors ----
@@ -187,7 +190,8 @@ async function loadOfficialMatch(taxon) {
   } catch (e) { if (state.taxon === taxon) say(`Official outline list unavailable: ${e.message}`); }
 }
 
-$('official-load').addEventListener('click', async () => {
+$('official-load').addEventListener('click', () => showOfficial());
+async function showOfficial({ fit = true } = {}) {
   const o = state.official, taxon = state.taxon;
   say('Loading official outline...');
   try {
@@ -199,10 +203,11 @@ $('official-load').addEventListener('click', async () => {
     $('official-load').hidden = true;
     const b = new maplibregl.LngLatBounds();
     for (const f of fc.features) f.geometry.coordinates.flat(f.geometry.type === 'Polygon' ? 1 : 2).forEach(c => b.extend(c));
-    if (!b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0 });
+    if (fit && !b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0 });
     say('Official outline shown (dashed), reference only.');
+    writeHash();
   } catch (e) { say(e.message); }
-});
+}
 $('sdm-toggle').addEventListener('change', async e => {
   if (e.target.checked && !map.getSource('sdm')) {
     const bounds = await sdmBounds(state.official.slug);
@@ -211,6 +216,7 @@ $('sdm-toggle').addEventListener('change', async e => {
     map.addLayer({ id: 'sdm', type: 'raster', source: 'sdm', paint: { 'raster-opacity': 0.6 } }, 'occ');
   }
   if (map.getLayer('sdm')) map.setLayoutProperty('sdm', 'visibility', e.target.checked ? 'visible' : 'none');
+  writeHash();
 });
 
 // ---- agreement layer ----
@@ -231,6 +237,7 @@ async function loadAgreement(taxon) {
 }
 $('agree-toggle').addEventListener('change', e => {
   if (map.getLayer('agree-fill')) map.setLayoutProperty('agree-fill', 'visibility', e.target.checked ? 'visible' : 'none');
+  writeHash();
 });
 map.on('click', 'agree-fill', e => {
   if (['polygon', 'freehand'].includes(draw?.mode())) return;
@@ -263,11 +270,47 @@ tabs.forEach(([t], i) => {
 
 // ---- boot ----
 initSearch($('q'), $('results'), selectTaxon);
-async function fromHash() {
-  const key = new URLSearchParams(location.hash.slice(1)).get('taxon');
-  if (!/^\d+$/.test(key || '')) return;
-  try { const name = await speciesName(key); $('q').value = name; await selectTaxon({ key, name }); }
-  catch (e) { say(`Could not load taxon ${key}: ${e.message}`); }
+// ---- shareable links: the hash mirrors the view, so the address bar is always a link to it ----
+let restoring = false;
+function writeHash() {
+  if (restoring || !state.taxon) return;
+  const boxes = [...document.querySelectorAll('#versions input[type=checkbox]')];
+  const on = boxes.filter(b => b.checked).map(b => b.id.slice(2));
+  const c = map.getCenter();
+  const h = buildHash({
+    taxon: state.taxon.key, ranges: on.length < boxes.length ? on : null,
+    official: !!state.official?.fc, sdm: $('sdm-toggle').checked,
+    occ: $('occ-toggle').checked, agree: $('agree-toggle').checked, at: [map.getZoom(), c.lat, c.lng],
+  });
+  if (h !== location.hash) history.replaceState(null, '', h);
 }
+map.on('moveend', writeHash);
+
+async function fromHash() {
+  const s = parseHash(location.hash);
+  if (!s || (state.taxon?.key === s.taxon && location.hash === lastHash)) return;
+  restoring = true;
+  try {
+    const name = await speciesName(s.taxon);
+    $('q').value = name;
+    await selectTaxon({ key: s.taxon, name });
+    if (s.ranges) for (const b of document.querySelectorAll('#versions input[type=checkbox]')) {
+      if (!s.ranges.includes(b.id.slice(2)) && b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); }
+    }
+    for (const k of ['occ', 'agree']) if ($(`${k}-toggle`).checked !== s[k]) { $(`${k}-toggle`).checked = s[k]; $(`${k}-toggle`).dispatchEvent(new Event('change')); }
+    await state.officialReady;
+    if (s.official && state.official) await showOfficial({ fit: !s.at });
+    if (s.sdm && state.official) { $('sdm-toggle').checked = true; $('sdm-toggle').dispatchEvent(new Event('change')); }
+    if (s.at) map.jumpTo({ zoom: s.at[0], center: [s.at[2], s.at[1]] });
+  } catch (e) { say(`Could not load taxon ${s.taxon}: ${e.message}`); }
+  finally { restoring = false; writeHash(); lastHash = location.hash; }
+}
+let lastHash = '';
 addEventListener('hashchange', fromHash);
 fromHash();
+
+$('share').addEventListener('click', async () => {
+  writeHash();
+  try { await navigator.clipboard.writeText(location.href); say('Link copied. It opens this species with the same layers and view.'); }
+  catch { say(`Copy this link: ${location.href}`); }
+});
