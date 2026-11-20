@@ -57,13 +57,13 @@ const touchHint = m => m === 'polygon' ? 'Tap to add points, then tap Done (or t
 const syncTools = () => {
   for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m);
   const m = draw?.mode();
-  $('hint').textContent = (touch ? touchHint(m) : HINTS[m]) ?? '';
+  $('hint').textContent = ((touch ? touchHint(m) : HINTS[m]) ?? '') + (patch.active() && (m === 'polygon' || m === 'freehand') ? ' In patch mode, shapes you draw are added to the official range. Use Cut area to remove.' : '');
   $('hint').dataset.idle = !HINTS[m];
   $('draw-actions').hidden = !touch || !HINTS[m] || m === 'select';
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); };
+const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.shapes.length ?? 0); $('change-field').hidden = !(state.copy || state.patch); $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n || state.patch); dimSource(n); rangeCheck.refresh(); steps(); syncTools(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 const lineage = initHistory({ map, state, say });
@@ -91,9 +91,11 @@ async function loadFile(file) {
   try {
     if (!draw) await mapReady;
     state.copy = null;
-    const n = draw.load(JSON.parse(await file.text()));
+    const gj = JSON.parse(await file.text()), was = patch.active();
+    if (was) patch.exit();
+    const n = draw.load(gj);
     if (!n) throw new Error('No polygons found in that file.');
-    say(`Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
+    say(`${was ? 'Patch editing stopped: loaded a file. ' : ''}Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
   } catch (e) { say(`Could not load ${file.name}: ${e.message}`); }
 }
 $('load-file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
@@ -180,17 +182,18 @@ function updateLegend() {
 }
 $('panel').addEventListener('change', updateLegend);
 
+const rangeOn = new Map(); // range id -> latest checkbox state, so a quick off/on while loading ends where the user left it
 async function toggleRange(r, color, on) {
   const id = `range-${r.id}`;
-  if (!on) { map.setLayoutProperty(`${id}-fill`, 'visibility', 'none'); map.setLayoutProperty(`${id}-line`, 'visibility', 'none'); return; }
-  if (!map.getSource(id)) {
+  rangeOn.set(id, on);
+  if (on && !map.getSource(id)) {
     const data = await patch.display(await loadRange(r.file));
+    if (map.getSource(id)) return; // a concurrent toggle added it while we awaited
     map.addSource(id, { type: 'geojson', data });
     map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': 0.3 } }, 'occ');
     map.addLayer({ id: `${id}-line`, type: 'line', source: id, paint: { 'line-color': color, 'line-width': 2 } }, 'occ');
   }
-  map.setLayoutProperty(`${id}-fill`, 'visibility', 'visible');
-  map.setLayoutProperty(`${id}-line`, 'visibility', 'visible');
+  for (const l of [`${id}-fill`, `${id}-line`]) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', rangeOn.get(id) ? 'visible' : 'none');
 }
 
 async function showVersions(fit = true) {
