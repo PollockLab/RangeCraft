@@ -20,10 +20,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # edit_date and author come from git history
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
       - name: Score (fall back to offline if GBIF fails)
-        run: uv run python scripts/score.py --offline
+        run: uv run python scripts/score.py || uv run python scripts/score.py --offline
+      - name: Expertise (offline if APIs fail)
+        env:
+          RANGECRAFT_MAILTO: ${{ vars.RANGECRAFT_MAILTO }}
+        run: uv run python scripts/expertise.py || uv run python scripts/expertise.py --offline
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
