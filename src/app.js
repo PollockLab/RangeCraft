@@ -140,7 +140,7 @@ function current() {
   const author = $('author').value.trim();
   if (!author) { say('Enter a display name.'); $('author').focus(); return null; }
   const github = $('github').value.trim();
-  if (!GITHUB_RE.test(github)) { say('Enter your GitHub username (letters, digits, hyphens, up to 39).'); $('github').focus(); return null; }
+  if (github && !GITHUB_RE.test(github)) { say('GitHub username: letters, digits, hyphens, up to 39.'); $('github').focus(); return null; }
   const orcid = $('orcid').value.trim(), inat = $('inat').value.trim();
   if (orcid && !ORCID_RE.test(orcid)) { say('ORCID must look like 0000-0002-1825-0097.'); $('orcid').focus(); return null; }
   if (inat && !INAT_RE.test(inat)) { say('iNaturalist username: letters, digits, _ or -.'); $('inat').focus(); return null; }
