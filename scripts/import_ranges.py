@@ -33,7 +33,6 @@ SB = "https://www.sciencebase.gov/catalog/"
 DFO = ("https://egisp.dfo-mpo.gc.ca/arcgis/rest/services/open_data_donnees_ouvertes/"
        "dfo_sara_distribution/MapServer/0/query")
 CKAN = "https://open.canada.ca/data/api/action/package_show?id=e0fabad5-9379-4077-87b9-5705f28c490b"
-IMPORTER = "wietzesuijker"
 REFERENCES = ROOT / "data" / "references.json"
 MAX_BYTES = 450_000
 MAX_PARTS = 150  # rangelib allows 200
@@ -45,6 +44,7 @@ GAP_TAXA = [
     "Cyanocitta cristata",
 ]
 DFO_TAXA = ["Enhydra lutris", "Eumetopias jubatus", "Dermochelys coriacea"]
+GAP_COVERAGE = "Conterminous US only. Absence north of the border means not mapped, not absent."
 UA = {"User-Agent": "RangeCraft (github.com/PollockLab/rangecraft)"}
 
 
@@ -113,9 +113,9 @@ def fit(geom, tol: float, min_area: float, to4326=lambda g: g) -> dict:
 
 def doc(name, key, geometry, author, created, sources, lic):
     return {"type": "FeatureCollection",
-            "properties": {"taxonKey": key, "scientificName": name, "author": author,
-                           "github": IMPORTER, "created": created, "basis": "new",
-                           "derived_from": author, "derived_from_license": lic, "sources": sources},
+            "properties": {"taxonKey": key, "scientificName": name, "author": author, "created": created, "basis": "new",
+                           "derived_from": author, "derived_from_license": lic, "sources": sources,
+                           **({"coverage": GAP_COVERAGE} if author == "USGS GAP" else {})},
             "features": [{"type": "Feature", "properties": {}, "geometry": geometry}]}
 
 

@@ -130,6 +130,11 @@ NOREPLY = re.compile(r"^(?:\d+\+)?([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)@use
                      re.IGNORECASE)
 
 
+def imported_source(meta: dict) -> str | None:
+    """Publisher name for a range imported verbatim from a published source, credited to it, not the committer."""
+    return meta["author"] if meta.get("derived_from") == meta.get("author") and meta.get("basis") == "new" else None
+
+
 def identity_from_commit(email: str, name: str) -> tuple[str, str]:
     """(credit key, identity). GitHub noreply email -> (login, "github"); else (name, "unverified").
 

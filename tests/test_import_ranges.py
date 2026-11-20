@@ -45,8 +45,14 @@ def test_doc_matches_schema(tmp_path):
     f = p / "usgs-gap.geojson"
     f.write_text(json.dumps(d))
     m = ir.load_range(f)["meta"]
-    assert m["github"] == "wietzesuijker" and m["basis"] == "new" and m["derived_from_license"] == "US-PD"
+    assert "github" not in m and m["basis"] == "new" and m["derived_from_license"] == "US-PD"
 
 
 def test_us_pd_is_exportable():
     assert exportable({"basis": "expert-outline-edit", "derived_from_license": "US-PD"})
+
+
+def test_imported_source_credits_publisher_not_committer():
+    from rangelib import imported_source
+    assert imported_source({"author": "USGS GAP", "derived_from": "USGS GAP", "basis": "new"}) == "USGS GAP"
+    assert imported_source({"author": "Ana", "derived_from": "USGS GAP", "basis": "edit"}) is None

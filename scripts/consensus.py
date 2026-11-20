@@ -14,7 +14,7 @@ from shapely.geometry import mapping, shape
 from shapely.ops import polygonize, unary_union
 from shapely.prepared import prep
 
-from rangelib import RANGES_DIR, ROOT, RangeError, area_km2, load_range
+from rangelib import RANGES_DIR, ROOT, RangeError, area_km2, imported_source, load_range
 
 OUT_DIR = ROOT / "data" / "consensus"
 OUTLINE_CACHE = ROOT / "data" / "taxa_outline.json"
@@ -100,7 +100,7 @@ def load_voters(taxon_dir: Path) -> dict:
         except RangeError as e:
             print(f"skip {p.name}: {e}", file=sys.stderr)
             continue
-        who = contributor(p, r["meta"]["author"])
+        who = imported_source(r["meta"]) or contributor(p, r["meta"]["author"])
         key = (str(r["meta"]["created"]), p.name)
         if who not in latest or key > latest[who][0]:
             latest[who] = (key, r["geometry"])
