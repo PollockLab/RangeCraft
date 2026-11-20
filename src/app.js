@@ -1,32 +1,56 @@
-import { speciesName, occurrenceTiles, loadIndex, loadExperts, loadRange } from './api.js';
+import { speciesName, occurrenceTiles, loadIndex, loadExperts, loadRange, REPO } from './api.js';
 import { initSearch } from './search.js';
 import { buildCollection, download, proposeUrl, ORCID_RE, INAT_RE, GITHUB_RE } from './export.js';
 import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from './official.js';
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
+import { initDraw } from './draw.js';
 import { renderBoard, findExpert, expertiseLine, shownName } from './board.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
 const state = { taxon: null, index: null, experts: null, shown: new Set(), official: null };
 
-// mapbox-gl-draw hardcodes mapbox class names; point them at maplibre's.
-Object.assign(MapboxDraw.constants.classes, {
-  CONTROL_BASE: 'maplibregl-ctrl', CONTROL_PREFIX: 'maplibregl-ctrl-', CONTROL_GROUP: 'maplibregl-ctrl-group',
-});
-
 const map = new maplibregl.Map({
   container: 'map', style: 'https://tiles.openfreemap.org/styles/positron', center: [0, 20], zoom: 1.5,
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
-const draw = new MapboxDraw({ displayControlsDefault: false, controls: { polygon: true, trash: true } });
-map.addControl(draw, 'top-left');
 
 const say = t => { $('msg').textContent = t; };
 const mapReady = new Promise(res => map.once('load', res));
 
+// ---- drawing tools ----
+let draw;
+const TOOLS = { polygon: 't-polygon', freehand: 't-freehand', select: 't-select' };
+const syncTools = () => { for (const [m, id] of Object.entries(TOOLS)) $(id).setAttribute('aria-pressed', draw?.mode() === m); };
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }); });
+for (const [m, id] of Object.entries(TOOLS)) $(id).addEventListener('click', () => { if (draw) { draw.setMode(m); syncTools(); } });
+$('t-delete').addEventListener('click', () => { draw?.removeSelected(); });
+
+// Load GeoJSON from a file input or a drop on the map; replaces what is in the editor.
+async function loadFile(file) {
+  if (!file) return;
+  try {
+    if (!draw) await mapReady;
+    const n = draw.load(JSON.parse(await file.text()));
+    if (!n) throw new Error('No polygons found in that file.');
+    say(`Loaded ${n} polygon${n === 1 ? '' : 's'} from ${file.name}. Modify them, then export or propose.`);
+  } catch (e) { say(`Could not load ${file.name}: ${e.message}`); }
+}
+$('load-file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
+$('map').addEventListener('dragover', e => e.preventDefault());
+$('map').addEventListener('drop', e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+
+// "Open in RustGIS" needs a CORS-fetchable URL, so only published community files qualify.
+function setRustgis(file) {
+  const a = $('rustgis');
+  a.hidden = !file;
+  if (file) a.href = `https://web.rustgis.app/?blank&data=${encodeURIComponent(`https://raw.githubusercontent.com/${REPO}/main/${file.startsWith('data/') ? file : `data/ranges/${file}`}`)}`;
+}
+
 // ---- taxon selection ----
 async function selectTaxon({ key, name }) {
   state.taxon = { key: String(key), name };
+  setRustgis(null);
   history.replaceState(null, '', `#taxon=${key}`);
   $('selected').textContent = `${name} (GBIF ${key})`;
   await mapReady;
@@ -94,9 +118,9 @@ async function showVersions() {
     sc.className = 'muted';
     sc.textContent = fmtScore(r.score, r);
     const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit a copy' });
-    cb.addEventListener('change', () => toggleRange(r, color, cb.checked).catch(e => say(e.message)));
+    cb.addEventListener('change', () => { setRustgis(cb.checked ? r.file : null); toggleRange(r, color, cb.checked).catch(e => say(e.message)); });
     edit.addEventListener('click', async () => {
-      try { const fc = await loadRange(r.file); draw.deleteAll(); draw.add({ type: 'FeatureCollection', features: fc.features.filter(f => /Polygon/.test(f.geometry.type)) }); say('Loaded into the editor. Modify it, then export or propose.'); }
+      try { const fc = await loadRange(r.file); draw.load(fc); setRustgis(r.file); say('Loaded into the editor. Modify it, then export or propose.'); }
       catch (e) { say(e.message); }
     });
     li.append(cb, lab, sc);
@@ -111,7 +135,7 @@ async function showVersions() {
 // ---- export / propose ----
 function current() {
   if (!state.taxon) { say('Select a species first.'); return null; }
-  const features = draw.getAll().features;
+  const features = draw?.all() ?? [];
   if (!features.length) { say('Draw at least one polygon first.'); return null; }
   const author = $('author').value.trim();
   if (!author) { say('Enter a display name.'); $('author').focus(); return null; }
@@ -209,7 +233,7 @@ $('agree-toggle').addEventListener('change', e => {
   if (map.getLayer('agree-fill')) map.setLayoutProperty('agree-fill', 'visibility', e.target.checked ? 'visible' : 'none');
 });
 map.on('click', 'agree-fill', e => {
-  if (draw.getMode() === 'draw_polygon') return;
+  if (['polygon', 'freehand'].includes(draw?.mode())) return;
   new maplibregl.Popup().setLngLat(e.lngLat).setText(kOfN(e.features[0].properties)).addTo(map);
 });
 
