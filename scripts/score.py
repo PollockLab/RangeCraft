@@ -121,7 +121,7 @@ def main() -> int:
         entry = {
             "id": it["id"], "taxonKey": it["taxonKey"], "scientificName": m.get("scientificName"),
             "author": it["git_author"], "identity": it["identity"], "display": m["author"],
-            "github": m["github"], "orcid": m.get("orcid"),
+            "github": m.get("github"), "orcid": m.get("orcid"),
             "inat_login": m.get("inat_login"), "basis": m.get("basis"), "parent": m.get("parent"),
             "derived_from": m.get("derived_from"),
             "derived_from_license": m.get("derived_from_license"),
