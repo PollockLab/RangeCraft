@@ -68,7 +68,7 @@ const syncCard = () => { const n = (draw?.all().length ?? 0) + (state.patch?.sha
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 const lineage = initHistory({ map, state, say, edit: r => editRange(r) });
-const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial() });
+const patch = initPatch({ map, state, $, say, draw: () => draw, sync: () => syncCard(), showOfficial: () => showOfficial(), recordsIn: fc => rangeCheck.recordsIn(fc) });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
 mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, (op, sk) => patch.active() ? patch.sketch(op, sk) : reshape.apply(op, sk), () => reshape.reset(), drawn); syncTools(); });
