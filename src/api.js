@@ -3,7 +3,7 @@ import { readTile } from './mvt.js';
 import { SQUARE, recordParams } from './rangecheck.js';
 export const REPO = 'PollockLab/rangecraft';
 // Base URL of the deployed relay worker (see worker/README.md). Empty hides sign-in and relay submit.
-export const RELAY_URL = '';
+export const RELAY_URL = 'https://rangecraft-relay.wietze-suijker.workers.dev';
 
 export async function suggest(q, signal) {
   const r = await fetch(`https://api.gbif.org/v1/species/suggest?q=${encodeURIComponent(q)}&rank=SPECIES&limit=8`, { signal });
