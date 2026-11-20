@@ -23,10 +23,10 @@ export const INAT_RE = /^[A-Za-z0-9_-]{3,40}$/;
 
 export const filename = fc => `${slug(fc.properties.author)}-${fc.properties.created}.geojson`;
 
-export function download(fc) {
+export function download(fc, name = filename(fc)) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(fc, null, 1)], { type: 'application/geo+json' }));
-  a.download = filename(fc);
+  a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
 }

@@ -25,7 +25,7 @@ USGS GAP ranges, imported for 13 taxa, cover the conterminous United States only
 
 ## Can I use this for a Red List assessment?
 
-Not as a replacement for the Red List process. Red List maps are made by assessors working with a Red List Authority and published by the IUCN Red List Unit. You can export a RangeCraft range, with its author, date and sources, and give it to an assessor as supporting evidence, like other expert data. Whether it is used is the assessor's decision. RangeCraft ranges do not carry the presence, origin and seasonality codes that Red List polygons require, and the scores are not an assessment of extinction risk. Birds are assessed through BirdLife International.
+Not as a replacement for the Red List process. Red List maps are made by assessors working with a Red List Authority and published by the IUCN Red List Unit. You can export a RangeCraft range, with its author, date and sources, and give it to an assessor as supporting evidence, like other expert data. Whether it is used is the assessor's decision. "Export for Red List assessors" in step 4 writes GeoJSON with the IUCN Mapping Standards attributes (SCI_NAME, PRESENCE, ORIGIN, SEASONAL, COMPILER, YEAR, CITATION and others), so the assessor can load it directly. The scores are not an assessment of extinction risk. Birds are assessed through BirdLife International.
 
 ## Can I trace the official outline?
 

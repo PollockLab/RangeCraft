@@ -1,0 +1,33 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { buildIucn, CODES, iucnFilename } from '../src/iucn.js';
+
+const geom = { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
+const m = { sciName: 'Danaus plexippus', compiler: 'A. Person', year: 2026, url: 'https://x/#taxon=1', source: 'field notes' };
+
+test('required attributes and defaults', () => {
+  const fc = buildIucn([{ geometry: geom }, { geometry: geom }], m);
+  assert.equal(fc.features.length, 2);
+  assert.deepEqual(fc.features[0].properties, {
+    ID_NO: '', SCI_NAME: 'Danaus plexippus', PRESENCE: 1, ORIGIN: 1, SEASONAL: 1, COMPILER: 'A. Person', YEAR: 2026,
+    CITATION: 'RangeCraft community range, https://x/#taxon=1', SOURCE: 'field notes', DIST_COMM: fc.features[0].properties.DIST_COMM,
+  });
+  assert.deepEqual(fc.features[0].geometry, geom);
+});
+
+test('code lists and bounds', () => {
+  assert.deepEqual(Object.fromEntries(Object.entries(CODES).map(([k, v]) => [k, v.length])), { PRESENCE: 6, ORIGIN: 6, SEASONAL: 5 });
+  assert.equal(buildIucn([], { ...m, presence: '6', seasonal: 5 }).features.length, 0);
+  assert.equal(buildIucn([{ geometry: geom }], { ...m, presence: '3' }).features[0].properties.PRESENCE, 3);
+  for (const bad of [0, 7, 1.5, 'x']) assert.throws(() => buildIucn([], { ...m, presence: bad }), /PRESENCE/);
+  assert.throws(() => buildIucn([], { ...m, seasonal: 6 }), /SEASONAL/);
+});
+
+test('missing name or compiler, blank source, default year', () => {
+  assert.throws(() => buildIucn([], { ...m, sciName: '' }), /SCI_NAME/);
+  assert.throws(() => buildIucn([], { ...m, compiler: '' }), /COMPILER/);
+  const p = buildIucn([{ geometry: geom }], { ...m, source: undefined, year: undefined }).features[0].properties;
+  assert.equal(p.SOURCE, '');
+  assert.equal(p.YEAR, new Date().getFullYear());
+  assert.equal(iucnFilename('Danaus plexippus', 2026), 'danaus-plexippus-iucn-2026.geojson');
+});
