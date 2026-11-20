@@ -140,6 +140,11 @@ export const bin = n => {
   return `over ${b.toLocaleString('en-US')}`;
 };
 
+// GBIF query suffix for the records filter (map tiles and occurrence search take the same params).
+export const recordParams = (mode, year = new Date().getFullYear()) =>
+  mode === 'since2000' ? `&year=2000,${year}` : mode === 'specimens' ? '&basisOfRecord=PRESERVED_SPECIMEN' : '';
+export const RECORD_NOTE = { since2000: 'records since 2000 only', specimens: 'specimens only' };
+
 // One bold verdict from the share of records outside the range; ref names what was compared ("official outline", "your draft").
 export const verdict = (r, ref) => {
   const vs = ref ? ` (vs ${ref})` : '';

@@ -193,3 +193,10 @@ test('area of habitat counts only in-range cells at or above the threshold', () 
   assert.equal(none.aohKm2, null);
   assert.ok(!summaryItems(none).some(t => /Area of habitat/.test(t)));
 });
+
+test('recordParams builds the GBIF records filter', async () => {
+  const { recordParams } = await import('../src/rangecheck.js');
+  assert.equal(recordParams('all'), ''); assert.equal(recordParams(undefined), '');
+  assert.equal(recordParams('since2000', 2026), '&year=2000,2026');
+  assert.equal(recordParams('specimens'), '&basisOfRecord=PRESERVED_SPECIMEN');
+});

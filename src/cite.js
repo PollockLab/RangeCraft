@@ -1,4 +1,5 @@
 // Cite records: turn GBIF occurrences in a bin into source lines for the proposal. Formatting and dedupe are pure.
+import { recordParams } from './rangecheck.js';
 const API = 'https://api.gbif.org/v1/occurrence/search';
 
 export const citeLine = o => `GBIF occurrence ${o.key} (${[o.basisOfRecord, o.year, o.institutionCode && o.catalogNumber ? `catalogue ${o.institutionCode}:${o.catalogNumber}` : o.catalogNumber && `catalogue ${o.catalogNumber}`].filter(Boolean).join(', ')}) https://www.gbif.org/occurrence/${o.key}`;
@@ -10,14 +11,16 @@ export function addLines(text, lines) {
   return { text: fresh.length ? [text.replace(/\s+$/, ''), ...fresh].filter(Boolean).join('\n') : text, added: fresh.length };
 }
 
-// Up to 5 records in the bin, preferring preserved specimens. Throws on HTTP errors.
-export async function fetchCites(key, c, fetchFn = fetch) {
+// Up to 5 records in the bin, preferring preserved specimens, within the records filter. Throws on HTTP errors.
+export async function fetchCites(key, c, fetchFn = fetch, filter = 'all') {
   const geometry = encodeURIComponent(`POLYGON((${c.w} ${c.s},${c.e} ${c.s},${c.e} ${c.n},${c.w} ${c.n},${c.w} ${c.s}))`);
   const get = async extra => {
     const r = await fetchFn(`${API}?taxonKey=${encodeURIComponent(key)}&geometry=${geometry}&limit=5${extra}`);
     if (!r.ok) throw new Error(`GBIF ${r.status}`);
     return (await r.json()).results ?? [];
   };
-  const specimens = await get('&basisOfRecord=PRESERVED_SPECIMEN');
-  return (specimens.length ? specimens : await get('')).map(citeLine);
+  const f = recordParams(filter);
+  if (filter === 'specimens') return (await get(f)).map(citeLine);
+  const specimens = await get(`${f}&basisOfRecord=PRESERVED_SPECIMEN`);
+  return (specimens.length ? specimens : await get(f)).map(citeLine);
 }

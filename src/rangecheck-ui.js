@@ -5,6 +5,7 @@ import { sdmRawBox } from './official.js';
 import { fetchCites, addLines } from './cite.js';
 
 const $ = id => document.getElementById(id);
+const filter = () => $('rc-filter').value;
 
 // state: { taxon, official }. Returns { clear, legend }; clear() resets the toggle and layer (call on taxon change).
 export function initRangeCheck({ map, state, onChange, drawing, draft = () => [], say = () => {} }) {
@@ -62,7 +63,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       await Promise.all(Array.from({ length: 4 }, async () => {
         while (next < tiles.length && !stale()) {
           const t = tiles[next++];
-          rc.addTile(counts, t, await densityTile(taxon.key, t));
+          rc.addTile(counts, t, await densityTile(taxon.key, t, undefined, filter()));
           if (!stale()) $('rc-summary').textContent = `Counting GBIF records... ${Math.round((100 * ++done) / tiles.length)}%`;
         }
       }));
@@ -90,7 +91,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         'fill-opacity': ['case', ['in', ['get', 'status'], ['literal', ['gap', 'lowgap', 'survey']]], 0.3, ['interpolate', ['linear'], ['get', 'count'], 1, 0.12, 3, 0.3, 10, 0.5, 100, 0.75]] } }, 'occ');
       const covered = coverage && 'conterminous US', sum = $('rc-summary'), list = document.createElement('ul');
       list.replaceChildren(...rc.summaryItems(res).map(t => Object.assign(document.createElement('li'), { textContent: t })));
-      sum.replaceChildren(Object.assign(document.createElement('em'), { textContent: 'Rough guide: gaps often mean nobody has looked there yet.' }), document.createElement('br'), Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, ref) }), list);
+      sum.replaceChildren(Object.assign(document.createElement('em'), { textContent: 'Rough guide: gaps often mean nobody has looked there yet.' }), document.createElement('br'), Object.assign(document.createElement('strong'), { textContent: rc.verdict(res, [ref, rc.RECORD_NOTE[filter()] && `based on ${rc.RECORD_NOTE[filter()]}`].filter(Boolean).join(', ')) }), list);
       sum.title = rc.summaryTip(res, covered, why);
       targets = rc.surveyCsv(res.cells, taxon);
       $('rc-targets').hidden = targets.split('\n').length < 3;
@@ -110,6 +111,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   let timer;
   const refresh = () => { if ($('rc-toggle').checked) { clearTimeout(timer); timer = setTimeout(runRangeCheck, 500); } };
   $('versions').addEventListener('change', refresh);
+  $('rc-filter').addEventListener('change', refresh);
   const hatch = () => {
     const c = Object.assign(document.createElement('canvas'), { width: 8, height: 8 }), g = c.getContext('2d');
     g.strokeStyle = '#8a8a8a'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(0, 8); g.lineTo(8, 0); g.moveTo(-1, 1); g.lineTo(1, -1); g.moveTo(7, 9); g.lineTo(9, 7); g.stroke();
@@ -131,7 +133,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       const b = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cite records here', className: 'linkbtn' });
       b.addEventListener('click', async () => {
         try {
-          const { text, added } = addLines($('sources').value, await fetchCites(state.taxon.key, p));
+          const { text, added } = addLines($('sources').value, await fetchCites(state.taxon.key, p, undefined, filter()));
           $('sources').value = text;
           say(added ? `Added ${added} record${added === 1 ? '' : 's'} to Sources.` : 'No new records to add.');
         } catch (e) { say(`Could not fetch records: ${e.message}`); }

@@ -26,3 +26,12 @@ test('fetchCites falls back without basisOfRecord and surfaces HTTP errors', asy
   assert.ok(urls[0].includes('taxonKey=5') && urls[0].includes('limit=5') && urls[0].includes('basisOfRecord=PRESERVED_SPECIMEN') && !urls[1].includes('basisOfRecord'));
   await assert.rejects(fetchCites(5, c, async () => ({ ok: false, status: 500 })), /GBIF 500/);
 });
+
+test('fetchCites applies the records filter', async () => {
+  const urls = [], f = async u => (urls.push(u), { ok: true, json: async () => ({ results: [] }) });
+  const c = { w: 0, s: 1, e: 2, n: 3 };
+  await fetchCites(5, c, f, 'specimens');
+  assert.equal(urls.length, 1); assert.ok(urls[0].includes('basisOfRecord=PRESERVED_SPECIMEN'));
+  urls.length = 0; await fetchCites(5, c, f, 'since2000');
+  assert.ok(urls.length === 2 && urls.every(u => /year=2000,\d{4}/.test(u)));
+});

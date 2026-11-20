@@ -78,6 +78,7 @@
             <label class="check"><input type="checkbox" id="rc-toggle"><i class="sw" style="background:linear-gradient(90deg,#d62828,#1d6fd1,#2a9d4b)"></i> Check my range against GBIF records</label>
             <details class="info"><summary aria-label="About this layer">ⓘ</summary><p>Compares GBIF records with the official outline if shown, else the shown community ranges. Absence of records is not absence of the species: gaps mostly show where nobody has looked (sampling effort).</p></details>
           </div>
+          <label class="sub">Records: <select id="rc-filter"><option value="all">All</option><option value="since2000">Since 2000</option><option value="specimens">Specimens only</option></select></label>
           <div class="sub" id="rc-summary" role="status"></div>
           <button id="rc-targets" type="button" class="linkbtn" hidden title="Download a CSV of up to 50 suitable grid cells with no records, best habitat first">Survey targets (CSV)</button>
           <a id="rc-blitz" class="sub" href="https://openbiodiversity.ca/" target="_blank" rel="noopener" title="Blitz the Gap 2026 on openbiodiversity.ca: a citizen-science campaign to fill these gaps">Survey them in Blitz the Gap</a>
