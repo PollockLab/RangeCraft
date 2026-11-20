@@ -42,6 +42,8 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch
   // Sketch strokes are not edits of the range; vertex drags (update) go to onEdit, which stays cheap.
   td.on('change', (_ids, type) => { if (!sketchOp) type === 'update' ? onEdit() : onChange(); });
   return {
+    // Terra Draw has no finish() API; its modes finish on a keyup of keyEvents.finish (Enter) on the map container.
+    finish: () => map.getCanvas().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' })),
     mode: () => sketchOp ?? td.getMode(),
     setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m); },
     // Finished polygons only, not helper points or the one being drawn.

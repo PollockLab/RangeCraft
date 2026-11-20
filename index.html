@@ -15,7 +15,7 @@
     <button role="tab" id="tab-map" aria-controls="view-map" aria-selected="true">Map</button>
     <button role="tab" id="tab-board" aria-controls="view-board" aria-selected="false" tabindex="-1">Contributors</button>
   </nav>
-  <button id="share" type="button" hidden title="Copies a link that opens this species with the same layers and map view, e.g. to discuss a range with a colleague">Copy link to this view</button>
+  <button id="share" type="button" hidden aria-label="Copy link to this view" title="Copies a link that opens this species with the same layers and map view, e.g. to discuss a range with a colleague"><span class="full">Copy link to this view</span><span class="short">Share</span></button>
 </header>
 
 <main>
@@ -32,6 +32,7 @@
         <button aria-label="Undo" id="t-undo" type="button" hidden title="Undo the last Add area or Cut area"><span aria-hidden="true">↶</span><span class="tx">Undo</span></button>
       </div>
       <p id="hint" role="status"></p>
+      <div id="draw-actions" hidden><button id="draw-done" type="button" class="primary">Done</button><button id="draw-cancel" type="button">Cancel</button></div>
     </div>
     <aside id="panel">
       <section class="step" aria-labelledby="s1">
