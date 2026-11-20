@@ -90,6 +90,7 @@ summary { cursor:pointer; font-weight:600; font-size:.85rem; }
 header #share .short { display:none; }
 #modebar { display:flex; align-items:center; gap:.4rem; margin:.3rem 0 0; padding:.2rem .5rem; width:fit-content; max-width:22rem; background:var(--accent); color:var(--accent-fg); border-radius:6px; font-size:.8rem; font-weight:600; }
 #modebar:has(#mode:empty) { display:none; } #mode { margin:0; }
+#tools #mode-stop { min-height:0; color:inherit; padding:.05rem .5rem; background:transparent; border-color:currentColor; font-size:.75rem; } /* beats #tools button, which painted it white on white */
 #hint[data-idle=true], #hint:empty { display:none; }
 /* propose card: sticky footer of the panel */
 #propose-card { position:sticky; bottom:0; margin:0 -.75rem; padding:.5rem .75rem; background:var(--panel); border-top:1px solid var(--line); max-height:40%; overflow-y:auto; box-shadow:0 -6px 8px -6px rgba(0,0,0,.35); }
