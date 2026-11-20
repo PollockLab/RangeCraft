@@ -48,7 +48,8 @@ export function cleanProps(fc, session, today) {
   if (!/^\d+$/.test(String(raw.taxonKey ?? ''))) throw new RangeError(`taxonKey ${JSON.stringify(raw.taxonKey)} is not numeric`);
   const p = { taxonKey: Number(raw.taxonKey) };
   for (const k of KEEP.slice(1)) { const v = str(raw[k], k === 'sources' ? 4000 : 300); if (v) p[k] = v; }
-  p.author ||= session.name;
+  // A verified provider's name is authoritative; only unverified (email) sessions may pick a display name.
+  if (session.verified || !p.author) p.author = session.name;
   if (p.basis && !BASES.includes(p.basis)) throw new RangeError(`basis must be one of ${BASES.join(', ')}`);
   if (p.basis === 'expert-outline-edit' && !p.derived_from) throw new RangeError('basis expert-outline-edit requires derived_from');
   return { ...p, created: today, submitter: { provider: session.provider, id: session.id, ...(session.login && { login: session.login }), name: session.name, verified: !!session.verified } };

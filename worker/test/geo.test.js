@@ -50,6 +50,13 @@ test('login is carried in the submitter for display only', () => {
   assert.deepEqual(out.properties.submitter, { provider: 'github', id: '4242', login: 'ann', name: 'A', verified: true });
 });
 
+test('verified sessions cannot choose the author; unverified ones can', () => {
+  assert.equal(buildFile(fc({ author: 'Nobel Laureate' }), S).properties.author, 'Josiah');
+  const em = { provider: 'email', id: 'ab', name: 'Email contributor', verified: false };
+  assert.equal(buildFile(fc({ author: 'Ann' }), em).properties.author, 'Ann');
+  assert.equal(buildFile(fc({ author: '' }), em).properties.author, 'Email contributor');
+});
+
 test('author falls back to the session name; basis rules', () => {
   assert.equal(buildFile(fc({ author: undefined }), S).properties.author, 'Josiah');
   assert.throws(() => buildFile(fc({ basis: 'copied' }), S), /basis/);

@@ -146,8 +146,13 @@ def file_submitter(path: Path) -> dict | None:
 
 
 def is_relay_email(email: str) -> bool:
-    """True for the noreply address GitHub gives the relay App. [bot] logins cannot be registered
-    by users, so unlike a free-form author name this cannot be spoofed with a commit."""
+    """True for the noreply address GitHub gives the relay App.
+
+    GitHub sets it as the author of a squash merge of a PR the App opened, so with squash-only
+    merges it is not contributor-chosen. It is not unforgeable by someone who can push to the
+    default branch directly, and a PR whose author merely uses the bot's name or a look-alike email
+    never matches. validate.py separately limits `submitter` to PRs from this repo's own branches.
+    """
     return re.fullmatch(rf"(?:\d+\+)?{re.escape(RELAY_BOT)}@users\.noreply\.github\.com",
                         email.strip(), re.IGNORECASE) is not None
 

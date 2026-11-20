@@ -44,11 +44,14 @@ export function originAllowed(env, origin) {
   return env.ALLOW_LOCALHOST === '1' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 }
 
-// Parsed URL if its origin is allowed (so no credentials, no other host), else null.
+// Parsed URL if its origin is allowed and, on the deployed site, its path is under APP_PATH (the
+// project page, so no other pages on a shared github.io origin). Local dev origins skip the path check.
 export function checkReturn(env, value) {
   try {
     const u = new URL(value);
-    return originAllowed(env, u.origin) && !u.username && !u.password ? u : null;
+    if (u.username || u.password || !originAllowed(env, u.origin)) return null;
+    const local = !allowedOrigins(env).includes(u.origin);
+    return local || u.pathname.startsWith(env.APP_PATH || '/rangecraft/') ? u : null;
   } catch { return null; }
 }
 

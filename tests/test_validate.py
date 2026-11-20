@@ -27,21 +27,21 @@ BOT = validate.RELAY_BOT
 
 def test_submitter_only_from_relay_bot():
     E = validate.submitter_error
-    assert E([S], BOT) is None  # new file from the relay
-    assert "relay" in E([S], "alice")  # anyone else forging it
-    assert "relay" in E([S], "alice", base={})  # adding to an existing file
-    assert "relay" in E([S], BOT, base={})  # relay may not touch existing files either
-    assert E([], "alice") is None  # no submitter, nothing to say
-    assert "need a submitter" in E([], BOT)
+    assert E([S], True) is None  # new file from the relay
+    assert "relay" in E([S], False)  # anyone else forging it
+    assert "relay" in E([S], False, base={})  # adding to an existing file
+    assert "relay" in E([S], True, base={})  # relay may not touch existing files either
+    assert E([], False) is None  # no submitter, nothing to say
+    assert "need a submitter" in E([], True)
 
 
 def test_submitter_frozen_on_existing_file():
     E = validate.submitter_error
-    assert E([S], "maint", base={"submitter": S}) is None  # unchanged edit by a maintainer
+    assert E([S], False, base={"submitter": S}) is None  # unchanged edit by a maintainer
     other = {**S, "id": "0000-0001-5109-3700"}
-    assert "cannot change" in E([other], BOT, base={"submitter": S})
-    assert "cannot change" in E([other], "maint", base={"submitter": S})
-    assert "cannot change" in E([], "maint", base={"submitter": S})  # removal
+    assert "cannot change" in E([other], True, base={"submitter": S})
+    assert "cannot change" in E([other], False, base={"submitter": S})
+    assert "cannot change" in E([], False, base={"submitter": S})  # removal
 
 
 def test_submitter_in_features_cannot_differ():
@@ -70,3 +70,14 @@ def test_unowned_existing_file_cannot_be_taken_over():
 def test_relay_new_file_needs_no_github():
     assert M({"submitter": S}, BOT, relay=True) is None
     assert "differs" in M({"submitter": S, "github": "x"}, BOT, relay=True)
+
+
+def test_relay_pr_needs_same_repo_head(monkeypatch):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "PollockLab/rangecraft")
+    monkeypatch.setenv("PR_HEAD_REPO", "pollocklab/rangecraft")
+    assert validate.is_relay_pr(BOT)
+    assert not validate.is_relay_pr("alice")
+    monkeypatch.setenv("PR_HEAD_REPO", "mallory/rangecraft")  # a fork running an App with the same name
+    assert not validate.is_relay_pr(BOT)
+    monkeypatch.delenv("PR_HEAD_REPO")
+    assert not validate.is_relay_pr(BOT)

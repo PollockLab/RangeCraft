@@ -19,4 +19,5 @@ jobs:
       - run: uv run python scripts/validate.py
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}

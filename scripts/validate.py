@@ -4,7 +4,8 @@ If env PR_AUTHOR is set (CI: the PR opener's GitHub login), a range file changed
 a `github` property other than the PR author is an error (all files if the diff cannot be computed).
 `github` is optional only when a maintainer (write access) opens the PR for an expert without GitHub.
 Existing files stay bound to the `github` owner recorded on the base branch.
-`submitter` (the identity the relay signed in) is accepted only when PR_AUTHOR is the relay bot, and
+`submitter` (the identity the relay signed in) is accepted only when PR_AUTHOR is the relay bot and
+PR_HEAD_REPO is this repository (GITHUB_REPOSITORY), and
 an existing file's submitter never changes. The relay bot counts as a trusted opener.
 """
 from __future__ import annotations
@@ -40,11 +41,18 @@ def author_mismatch(meta: dict, pr_author: str, base_meta: dict | None = None,
     return None if trusted or relay else "github is required unless a maintainer opens the PR"
 
 
-def submitter_error(found: list, pr_author: str, base: dict | None = None) -> str | None:
+def is_relay_pr(pr_author: str) -> bool:
+    """The PR was opened by the relay bot from this repository's own branch (a fork with an App of
+    the same name does not count). CI exports PR_HEAD_REPO; GITHUB_REPOSITORY is set by Actions."""
+    head, repo = os.environ.get("PR_HEAD_REPO", ""), os.environ.get("GITHUB_REPOSITORY", "")
+    return bool(head) and head.casefold() == repo.casefold() and \
+        pr_author.casefold() == RELAY_BOT.casefold()
+
+
+def submitter_error(found: list, is_relay: bool, base: dict | None = None) -> str | None:
     """found: every `submitter` value in the file (collection and features). base: its base-branch
     properties, None for a new file. Only the relay bot may add one; an existing one is frozen."""
     old = (base or {}).get("submitter")
-    is_relay = pr_author.casefold() == RELAY_BOT.casefold()
     if len({json.dumps(f, sort_keys=True) for f in found}) > 1:
         return "submitter differs between collection and features"
     new = found[0] if found else None
@@ -95,7 +103,7 @@ def main() -> int:
     files = sorted(RANGES_DIR.glob("*/*.geojson"))
     pr_author = os.environ.get("PR_AUTHOR", "").strip()
     trusted = os.environ.get("PR_AUTHOR_ASSOCIATION", "") in {"OWNER", "MEMBER", "COLLABORATOR"}
-    is_relay = pr_author.casefold() == RELAY_BOT.casefold()
+    is_relay = is_relay_pr(pr_author)
     changed = changed_files() if pr_author else None
     errors = []
     for f in files:
@@ -108,7 +116,7 @@ def main() -> int:
         check = changed is None or rel.as_posix() in changed
         base = base_meta(rel.as_posix())
         msg = (author_mismatch(meta, pr_author, base, trusted, is_relay)
-               or submitter_error(found_submitters(f), pr_author, base)) if check and pr_author else None
+               or submitter_error(found_submitters(f), is_relay, base)) if check and pr_author else None
         if msg:
             errors.append(f"{rel}: {msg}")
     for e in errors:

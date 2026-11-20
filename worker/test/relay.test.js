@@ -7,6 +7,8 @@ import { fc, kv, lastPublicKey, pkcs8Pem } from './helpers.js';
 
 const APP = 'https://pollocklab.github.io';
 let env, calls, realFetch, routes;
+// Stand-in for the Rate Limiting binding: `max` calls per key, then failure.
+const limiter = (max = 1000) => { const n = new Map(); return { limit: async ({ key }) => { n.set(key, (n.get(key) || 0) + 1); return { success: n.get(key) <= max }; } }; };
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status });
 
 beforeEach(async () => {
@@ -21,6 +23,7 @@ beforeEach(async () => {
   env = { HMAC_KEY: 'k'.repeat(32), APP_ORIGIN: APP, GH_REPO: 'PollockLab/rangecraft', GH_BASE: 'main', KV: kv(),
     GH_APP_ID: '42', GH_APP_PRIVATE_KEY: await pkcs8Pem(), GH_INSTALLATION_ID: '7',
     ORCID_CLIENT_ID: 'oc', ORCID_CLIENT_SECRET: 'os', GITHUB_CLIENT_ID: 'gc', GITHUB_CLIENT_SECRET: 'gs',
+    RL_IDENTITY: limiter(), RL_IP: limiter(),
     RESEND_API_KEY: 'rk', MAIL_FROM: 'RangeCraft <no-reply@example.org>' };
 });
 afterEach(() => { globalThis.fetch = realFetch; });
@@ -34,7 +37,7 @@ test('/providers lists only providers with secrets; none without HMAC_KEY', asyn
   assert.deepEqual((await (await get('/providers')).json()).providers, ['orcid', 'github', 'email']);
   delete env.GITHUB_CLIENT_SECRET; delete env.RESEND_API_KEY;
   assert.deepEqual((await (await get('/providers')).json()).providers, ['orcid']);
-  assert.equal((await get('/auth/github/start?return=' + encodeURIComponent(APP + '/'))).status, 404);
+  assert.equal((await get('/auth/github/start?return=' + encodeURIComponent(APP + '/rangecraft/'))).status, 404);
   delete env.HMAC_KEY;
   assert.deepEqual((await (await get('/providers')).json()).providers, []);
 });
@@ -66,14 +69,14 @@ test('github flow: PKCE, state, cookie binding, session in the fragment', async 
 });
 
 test('callback rejects a forged state and a state for another provider', async () => {
-  const forged = await sign('x'.repeat(32), 'state', { nonce: 'n', return: APP + '/', p: 'orcid' }, 60);
+  const forged = await sign('x'.repeat(32), 'state', { nonce: 'n', return: APP + '/rangecraft/', p: 'orcid' }, 60);
   assert.equal((await get(`/auth/orcid/callback?code=c&state=${forged}`, { Cookie: 'rc_n=n' })).status, 400);
-  const good = await sign(env.HMAC_KEY, 'state', { nonce: 'n', return: APP + '/', p: 'orcid' }, 60);
+  const good = await sign(env.HMAC_KEY, 'state', { nonce: 'n', return: APP + '/rangecraft/', p: 'orcid' }, 60);
   assert.equal((await get(`/auth/github/callback?code=c&state=${good}`, { Cookie: 'rc_n=n' })).status, 400);
 });
 
 test('orcid callback: verified iD and name', async () => {
-  const s = await get('/auth/orcid/start?return=' + encodeURIComponent(APP + '/'));
+  const s = await get('/auth/orcid/start?return=' + encodeURIComponent(APP + '/rangecraft/'));
   assert.ok(!new URL(s.headers.get('Location')).searchParams.has('code_challenge'));
   assert.equal(new URL(s.headers.get('Location')).searchParams.get('scope'), '/authenticate');
   const state = new URL(s.headers.get('Location')).searchParams.get('state');
@@ -85,7 +88,7 @@ test('orcid callback: verified iD and name', async () => {
 });
 
 test('provider failure redirects with an error, no token', async () => {
-  const s = await get('/auth/orcid/start?return=' + encodeURIComponent(APP + '/'));
+  const s = await get('/auth/orcid/start?return=' + encodeURIComponent(APP + '/rangecraft/'));
   const state = new URL(s.headers.get('Location')).searchParams.get('state');
   routes['POST https://orcid.org/oauth/token'] = () => J({ error: 'invalid_grant' }, 400);
   const r = await get(`/auth/orcid/callback?code=c&state=${state}`, { Cookie: cookie(s) });
@@ -95,7 +98,7 @@ test('provider failure redirects with an error, no token', async () => {
 
 test('inat: token, api_token, users/me', async () => {
   env.INAT_CLIENT_ID = 'i'; env.INAT_CLIENT_SECRET = 's';
-  const s = await get('/auth/inat/start?return=' + encodeURIComponent(APP + '/'));
+  const s = await get('/auth/inat/start?return=' + encodeURIComponent(APP + '/rangecraft/'));
   const state = new URL(s.headers.get('Location')).searchParams.get('state');
   routes['POST https://www.inaturalist.org/oauth/token'] = () => J({ access_token: 'at' });
   routes['GET https://www.inaturalist.org/users/api_token'] = init => { assert.equal(init.headers.Authorization, 'Bearer at'); return J({ api_token: 'jwt' }); };
@@ -107,7 +110,7 @@ test('inat: token, api_token, users/me', async () => {
 test('email magic link: unverified identity, one-time use, rate limit', async () => {
   let mail;
   routes['POST https://api.resend.com/emails'] = init => { mail = JSON.parse(init.body); return J({ id: 'm' }); };
-  const start = await post('/auth/email/start', { email: 'Ann@Example.org', return: APP + '/' });
+  const start = await post('/auth/email/start', { email: 'Ann@Example.org', return: APP + '/rangecraft/' });
   assert.equal(start.status, 200);
   assert.match(start.headers.get('Set-Cookie'), /HttpOnly; Secure; SameSite=None/);
   assert.equal(start.headers.get('Access-Control-Allow-Credentials'), 'true');
@@ -119,15 +122,15 @@ test('email magic link: unverified identity, one-time use, rate limit', async ()
   assert.match(sess.id, /^[0-9a-f]{16}$/);
   assert.ok(!JSON.stringify(sess).includes('ann@'));
   assert.equal((await get(link.pathname + link.search, { Cookie: cookie(start) })).status, 400); // consumed
-  assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/' })).status, 200);
-  assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/' })).status, 200);
-  assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/' })).status, 429);
-  assert.equal((await post('/auth/email/start', { email: 'bad', return: APP + '/' })).status, 400);
+  assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/rangecraft/' })).status, 200);
+  assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/rangecraft/' })).status, 200);
+  assert.equal((await post('/auth/email/start', { email: 'ann@example.org', return: APP + '/rangecraft/' })).status, 429);
+  assert.equal((await post('/auth/email/start', { email: 'bad', return: APP + '/rangecraft/' })).status, 400);
   assert.equal((await post('/auth/email/start', { email: 'b@example.org', return: 'https://evil.io/' })).status, 400);
 });
 
 test('expired magic link is rejected', async () => {
-  const t = await sign(env.HMAC_KEY, 'ml', { nonce: 'n', id: 'x', name: 'n', return: APP + '/' }, 60, Date.now() - 120_000);
+  const t = await sign(env.HMAC_KEY, 'ml', { nonce: 'n', id: 'x', name: 'n', return: APP + '/rangecraft/' }, 60, Date.now() - 120_000);
   await env.KV.put('ml:n', 'a@example.org');
   assert.equal((await get(`/auth/email/callback?t=${t}`, { Cookie: 'rc_ml=n' })).status, 400);
 });
@@ -135,7 +138,7 @@ test('expired magic link is rejected', async () => {
 test('email login CSRF: no cookie means a confirmation page, not a token', async () => {
   let mail;
   routes['POST https://api.resend.com/emails'] = init => { mail = JSON.parse(init.body); return J({ id: 'm' }); };
-  const start = await post('/auth/email/start', { email: 'victim@example.org', return: APP + '/' });
+  const start = await post('/auth/email/start', { email: 'victim@example.org', return: APP + '/rangecraft/' });
   const link = new URL(mail.text.match(/https:\/\/\S+/)[0]);
   const other = await get(link.pathname + link.search); // different browser: no cookie
   assert.equal(other.status, 200);
@@ -165,7 +168,7 @@ test('email login CSRF: no cookie means a confirmation page, not a token', async
 
 test('github and inat sessions key on the numeric id, not the login', async () => {
   routes['POST https://github.com/login/oauth/access_token'] = () => J({ access_token: 'at' });
-  const states = async () => { const s = await get('/auth/github/start?return=' + encodeURIComponent(APP + '/')); return [new URL(s.headers.get('Location')).searchParams.get('state'), cookie(s)]; };
+  const states = async () => { const s = await get('/auth/github/start?return=' + encodeURIComponent(APP + '/rangecraft/')); return [new URL(s.headers.get('Location')).searchParams.get('state'), cookie(s)]; };
   const ids = [];
   for (const [id, login] of [[1, 'ann'], [2, 'ann']]) { // the login was renamed away and reused
     routes['GET https://api.github.com/user'] = () => J({ id, login, name: 'A' });
@@ -203,7 +206,7 @@ test('submit opens a labelled PR with the session as submitter', async () => {
   assert.equal(r.headers.get('Access-Control-Allow-Origin'), APP);
   assert.equal((await r.json()).url, 'https://github.com/PollockLab/rangecraft/pull/3');
   const put = calls.find(c => c.key.startsWith('PUT '));
-  assert.match(put.key, /contents\/data\/ranges\/123\/ann-[0-9a-f]{8}\.geojson$/);
+  assert.match(put.key, /contents\/data\/ranges\/123\/josiah-[0-9a-f]{8}\.geojson$/);
   const sent = JSON.parse(put.init.body);
   const file = JSON.parse(Buffer.from(sent.content, 'base64'));
   assert.equal(file.properties.submitter.id, '0000-0002-1825-0097');
@@ -226,10 +229,27 @@ test('submit guards: auth, origin, size, validity, rate limit', async () => {
   assert.equal((await post('/submit', { geojson: fc({ taxonKey: 'x' }) }, await bearer())).status, 400);
   assert.equal((await post('/submit', { }, await bearer())).status, 400);
   assert.equal(calls.filter(c => c.key.includes('github.com/repos')).length, 0);
+});
+
+test('submit rate limits: per identity, per IP, daily cap, and no limiter means 503', async () => {
+  mockGithub();
+  const good = { geojson: fc() };
+  env.RL_IDENTITY = limiter(2);
   const h = await bearer();
-  for (let i = 0; i < 10; i++) assert.equal((await post('/submit', good, h)).status, 200);
+  assert.equal((await post('/submit', good, h)).status, 200);
+  assert.equal((await post('/submit', good, h)).status, 200);
   assert.equal((await post('/submit', good, h)).status, 429);
   assert.equal((await post('/submit', good, await bearer({ id: 'someone-else' }))).status, 200);
+  env.RL_IP = limiter(1);
+  assert.equal((await post('/submit', good, await bearer({ id: 'a' }), { 'CF-Connecting-IP': '1.1.1.1' })).status, 200);
+  assert.equal((await post('/submit', good, await bearer({ id: 'b' }), { 'CF-Connecting-IP': '1.1.1.1' })).status, 429);
+  env.RL_IP = limiter(); env.RL_IDENTITY = limiter(); env.DAILY_CAP = '2';
+  env.KV.m.clear();
+  assert.equal((await post('/submit', good, await bearer({ id: 'c' }))).status, 200);
+  assert.equal((await post('/submit', good, await bearer({ id: 'd' }))).status, 200);
+  assert.equal((await post('/submit', good, await bearer({ id: 'e' }))).status, 429);
+  delete env.RL_IP;
+  assert.equal((await post('/submit', good, await bearer())).status, 503);
 });
 
 test('GitHub failure deletes the branch and returns 502', async () => {
@@ -249,18 +269,18 @@ test('CORS preflight only grants the app origin', async () => {
 
 test('client nonce is signed into the session for oauth and email', async () => {
   const cn = 'client-nonce-1234';
-  const s = await get('/auth/github/start?cn=' + cn + '&return=' + encodeURIComponent(APP + '/'));
+  const s = await get('/auth/github/start?cn=' + cn + '&return=' + encodeURIComponent(APP + '/rangecraft/'));
   const state = new URL(s.headers.get('Location')).searchParams.get('state');
   assert.equal((await verify(env.HMAC_KEY, 'state', state)).cn, cn);
   routes['POST https://github.com/login/oauth/access_token'] = () => J({ access_token: 'at' });
   routes['GET https://api.github.com/user'] = () => J({ id: 1, login: 'a' });
   const ok = await get(`/auth/github/callback?code=c&state=${state}`, { Cookie: cookie(s) });
   assert.equal((await verify(env.HMAC_KEY, 'session', fragment(ok).get('token'))).cn, cn);
-  const bad = await get('/auth/github/start?cn=%3Cx%3E&return=' + encodeURIComponent(APP + '/'));
+  const bad = await get('/auth/github/start?cn=%3Cx%3E&return=' + encodeURIComponent(APP + '/rangecraft/'));
   assert.equal((await verify(env.HMAC_KEY, 'state', new URL(bad.headers.get('Location')).searchParams.get('state'))).cn, undefined);
   let mail;
   routes['POST https://api.resend.com/emails'] = init => { mail = JSON.parse(init.body); return J({}); };
-  const st = await post('/auth/email/start', { email: 'a@example.org', return: APP + '/', cn });
+  const st = await post('/auth/email/start', { email: 'a@example.org', return: APP + '/rangecraft/', cn });
   const link = new URL(mail.text.match(/https:\/\/\S+/)[0]);
   const done = await get(link.pathname + link.search, { Cookie: cookie(st) });
   assert.equal((await verify(env.HMAC_KEY, 'session', fragment(done).get('token'))).cn, cn);

@@ -4,7 +4,7 @@ import { openPr } from './github.js';
 import { enabledProviders, PROVIDERS, sendMagicLink } from './providers.js';
 import { checkReturn, originAllowed, pkceChallenge, pkceVerifier, randomId, sha256hex, sign, verify, withParams } from './token.js';
 
-const MAX_BODY = 1_000_000, SESSION_TTL = 2 * 3600, SUBMITS_PER_DAY = 10;
+const MAX_BODY = 1_000_000, SESSION_TTL = 2 * 3600;
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
 const reply = (status, body, headers = {}) => new Response(typeof body === 'string' ? body : JSON.stringify(body), {
@@ -130,8 +130,12 @@ async function submit(req, env, origin) {
     if (e instanceof RangeError || e instanceof TypeError) return reply(400, { error: e.message });
     throw e;
   }
-  const day = new Date().toISOString().slice(0, 10);
-  if (!(await hit(env.KV, `sub:${sess.provider}:${sess.id}:${day}`, SUBMITS_PER_DAY, 86400))) return reply(429, { error: 'daily submission limit reached' });
+  if (!env.RL_IDENTITY || !env.RL_IP) return reply(503, { error: 'rate limiter not configured' });
+  const ip = req.headers.get('CF-Connecting-IP') || 'unknown';
+  const [byId, byIp] = await Promise.all([env.RL_IDENTITY.limit({ key: `${sess.provider}:${sess.id}` }), env.RL_IP.limit({ key: ip })]);
+  if (!byId.success || !byIp.success) return reply(429, { error: 'too many submissions, slow down' });
+  // The binding only does 10 or 60 s windows, so the daily total is a soft KV counter.
+  if (!(await hit(env.KV, `sub:all:${new Date().toISOString().slice(0, 10)}`, Number(env.DAILY_CAP) || 100, 86400))) return reply(429, { error: 'daily relay limit reached, try tomorrow' });
   const p = file.properties, sid = [...crypto.getRandomValues(new Uint8Array(4))].map(b => b.toString(16).padStart(2, '0')).join('');
   const clean = s => String(s).replace(/[\r\n]+/g, ' ').slice(0, 100);
   const title = `range: ${clean(p.scientificName || p.taxonKey)} by ${clean(sess.name)} (${sess.provider})`;

@@ -26,9 +26,16 @@ test('tampered payload, wrong key, wrong typ and junk are rejected', async () =>
 
 test('return URL allowlist', () => {
   assert.ok(checkReturn(env, 'https://pollocklab.github.io/rangecraft/#taxon=1'));
-  for (const bad of ['https://evil.io/', 'https://pollocklab.github.io.evil.io/', 'https://pollocklab.github.io@evil.io/', 'http://pollocklab.github.io/', 'javascript:alert(1)', 'http://localhost:8816/', '', null]) assert.equal(checkReturn(env, bad), null, String(bad));
+  for (const bad of ['https://evil.io/rangecraft/', 'https://pollocklab.github.io.evil.io/', 'https://pollocklab.github.io@evil.io/', 'http://pollocklab.github.io/', 'javascript:alert(1)', 'http://localhost:8816/', '', null]) assert.equal(checkReturn(env, bad), null, String(bad));
   assert.ok(checkReturn({ ...env, ALLOW_LOCALHOST: '1' }, 'http://localhost:8816/'));
   assert.equal(checkReturn({ ...env, ALLOW_LOCALHOST: '1' }, 'http://localhost.evil.io/'), null);
+});
+
+test('return URL must be under the project path on the deployed origin', () => {
+  for (const bad of ['https://pollocklab.github.io/', 'https://pollocklab.github.io/other/', 'https://pollocklab.github.io/rangecraft', 'https://pollocklab.github.io/rangecrafty/', 'https://pollocklab.github.io/rangecraft/../x/']) assert.equal(checkReturn(env, bad), null, bad);
+  assert.ok(checkReturn(env, 'https://pollocklab.github.io/rangecraft/'));
+  assert.ok(checkReturn({ ...env, APP_PATH: '/x/' }, 'https://pollocklab.github.io/x/y'));
+  assert.ok(checkReturn({ ...env, ALLOW_LOCALHOST: '1' }, 'http://localhost:8816/')); // dev serves from /
 });
 
 test('token is appended to the existing fragment', () => {

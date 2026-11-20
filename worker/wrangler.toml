@@ -7,11 +7,29 @@ compatibility_date = "2025-01-01"
 APP_ORIGIN = "https://pollocklab.github.io"
 GH_REPO = "PollockLab/rangecraft"
 GH_BASE = "main"
+# Return URLs on APP_ORIGIN must be under this path.
+APP_PATH = "/rangecraft/"
+# Overall cap on relay PRs per UTC day.
+DAILY_CAP = "100"
 
 # Create with: npx wrangler kv namespace create RELAY_KV, then paste the id here.
 [[kv_namespaces]]
 binding = "KV"
 id = "REPLACE_WITH_KV_ID"
+
+# /submit burst limits (Rate Limiting binding; period must be 10 or 60 seconds). Wrangler 3 syntax,
+# newer wrangler uses [[ratelimits]]. Missing bindings make /submit answer 503.
+[[unsafe.bindings]]
+name = "RL_IDENTITY"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 3, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_IP"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 10, period = 60 }
 
 # Secrets (wrangler secret put): HMAC_KEY, GH_APP_ID, GH_APP_PRIVATE_KEY, GH_INSTALLATION_ID,
 # ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, INAT_CLIENT_ID, INAT_CLIENT_SECRET,
