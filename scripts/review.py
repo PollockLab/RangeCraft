@@ -130,11 +130,15 @@ def map_block(new: BaseGeometry, old: BaseGeometry) -> list[str]:
     return ["", "```geojson", text, "```", *note]
 
 
-def preview_url(path: str, head: str) -> str:
-    """Site link that draws this file at the PR's commit next to the published and official ranges."""
-    sha = git("rev-parse", head).strip()
-    taxon = Path(path).parent.name
-    return f"{SITE}#taxon={taxon}&official=1&preview={sha}/{taxon}/{Path(path).name}"
+def preview_link(path: str, head: str) -> str:
+    """Markdown link drawing this file at the PR's commit next to the published and official ranges.
+
+    Empty unless the path matches what the site accepts, so a crafted file name cannot break out."""
+    sha, taxon, name = git("rev-parse", head).strip(), Path(path).parent.name, Path(path).name
+    if not (re.fullmatch(r"[0-9a-f]{40}", sha) and taxon.isdigit() and re.fullmatch(r"[\w.-]+\.geojson", name)):
+        return ""
+    url = f"{SITE}#taxon={taxon}&official=1&preview={sha}/{taxon}/{name}"
+    return f" · [**View on RangeCraft next to the official outline**]({url})"
 
 
 def plain(value, limit: int = 200) -> str:
@@ -160,8 +164,7 @@ def section(path: str, head: str, base: str) -> str:
     lines = [
         f"### {plain(meta.get('scientificName') or meta['taxonKey'])} by {who}",
         "",
-        (f"`{name}` · basis `{meta.get('basis') or 'unset'}` · "
-        f"[**View on RangeCraft next to the official outline**]({preview_url(path, head)})"),
+        f"`{name}` · basis `{meta.get('basis') or 'unset'}`" + preview_link(path, head),
     ]
     if meta.get("message"):
         lines += ["", f"> {plain(meta['message'])}"]

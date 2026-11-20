@@ -26,3 +26,9 @@ def test_plain_neutralises_markdown():
     out = review.plain("x\n\n## [click](http://e.vil) <img> @org/team `c`")
     assert "\n" not in out
     assert re.search(r"(?<!\\)[`\[\]()<>#@]", out) is None  # every control character escaped
+
+
+def test_preview_link_only_for_safe_names(monkeypatch):
+    monkeypatch.setattr(review, "git", lambda *a: "a" * 40 + "\n")
+    assert "preview=" + "a" * 40 + "/1/x-1.geojson)" in review.preview_link("data/ranges/1/x-1.geojson", "h")
+    assert review.preview_link("data/ranges/1/x)[y](z.geojson", "h") == ""
