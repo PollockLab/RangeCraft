@@ -100,3 +100,5 @@ footer p { margin:.3rem 0; }
   nav { display:flex; flex:none; }
   header #share { font-size:.7rem; padding:.2rem .35rem; line-height:1.15; min-width:0; }
 }
+.maplibregl-popup-content { color:#1b1f23; }
+.maplibregl-popup-content a { display:block; margin-top:.2rem; }

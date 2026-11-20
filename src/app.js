@@ -10,6 +10,7 @@ import { buildHash, parseHash } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
 import { buildIucn, iucnFilename, CODES, DEFAULTS } from './iucn.js';
+import { initRangeCheck } from './rangecheck-ui.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#9b5de5', '#f15bb5'];
@@ -21,6 +22,7 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 const setLegend = initLegend(map);
+const rangeCheck = initRangeCheck({ map, state, onChange: () => updateLegend(), drawing: () => ['polygon', 'freehand'].includes(draw?.mode()) });
 const say = t => { $('msg').textContent = t; };
 const mapReady = new Promise(res => map.once('load', res));
 
@@ -82,6 +84,7 @@ async function selectTaxon({ key, name }, { fit = true } = {}) {
   $('q').value = name;
   await mapReady;
   setOccurrences();
+  rangeCheck.clear();
   setOfficialUi(null);
   state.officialReady = loadOfficialMatch(state.taxon);
   loadAgreement(state.taxon);
@@ -116,6 +119,7 @@ function updateLegend() {
     if ($('occ-toggle').checked) items.push({ label: 'GBIF occurrences', swatch: 'linear-gradient(90deg,#ffe066,#e5383b)' });
     if (state.official?.fc) items.push({ label: 'Official range (reference)', dashed: true });
     if (state.official && $('sdm-toggle').checked) items.push({ label: 'Habitat model', swatch: 'linear-gradient(90deg,#440154,#21918c,#fde725)' });
+    items.push(...rangeCheck.legend());
     for (const b of document.querySelectorAll('#versions input:checked')) items.push({ label: b.dataset.label, swatch: b.dataset.color });
     if (!$('agree-body').hidden && $('agree-toggle').checked) items.push({ label: 'Agreement (few to all)', palette: PALETTE });
   }
@@ -170,6 +174,7 @@ async function showVersions(fit = true) {
     tgl.addEventListener('click', () => { more.hidden = !more.hidden; tgl.setAttribute('aria-expanded', !more.hidden); });
     const cb = Object.assign(document.createElement('input'), { type: 'checkbox', id: `v-${r.id}`, checked: true });
     cb.dataset.color = color;
+    cb.dataset.file = r.file;
     cb.dataset.label = `${shownName(r.author)}, ${r.created}`;
     const lab = document.createElement('label');
     lab.htmlFor = cb.id;
