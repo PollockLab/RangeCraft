@@ -16,10 +16,13 @@ export function medianGap(ring, project) {
   return d.length ? d[d.length >> 1] : Infinity;
 }
 
-// Extra hint for a selected polygon feature: crowded handles at this zoom, and holes that cannot be dragged.
+// True when the outer ring's handles would overlap at this zoom, so draw.js hides them.
+export const crowded = (f, project) => { const r = f?.geometry?.coordinates?.[0]; return !!r && medianGap(r, project) < MIN_GAP; };
+
+// Extra hint for a selected polygon feature: hidden handles at this zoom, and holes that cannot be dragged.
 export function editHint(f, project) {
   const rings = f?.geometry?.coordinates ?? [], out = [];
-  if (rings[0] && medianGap(rings[0], project) < MIN_GAP) out.push('Zoom in to drag single points; at this zoom drag moves the whole shape.');
+  if (crowded(f, project)) out.push('Corner points are hidden at this zoom: zoom in to drag single points; dragging now moves the whole shape.');
   if (rings.length > 1) out.push('Hole edges cannot be dragged; use Add area or Cut area.');
   return out.join(' ');
 }
