@@ -8,7 +8,7 @@ export const RELAY_URL = '';
 export async function suggest(q, signal) {
   const r = await fetch(`https://api.gbif.org/v1/species/suggest?q=${encodeURIComponent(q)}&rank=SPECIES&limit=8`, { signal });
   if (!r.ok) throw new Error(`GBIF ${r.status}`);
-  return (await r.json()).map(s => ({ key: s.key, name: s.scientificName, label: s.canonicalName || s.scientificName, vernacular: s.vernacularName }));
+  return (await r.json()).map(s => ({ key: s.key, name: s.canonicalName || s.scientificName, label: s.canonicalName || s.scientificName, vernacular: s.vernacularName }));
 }
 
 export async function speciesName(key) {

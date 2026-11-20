@@ -120,9 +120,10 @@
         <p id="draw-hint" class="muted">Pick a species to start.</p>
         <div id="propose-box" hidden>
           <button id="open-propose" type="button" class="primary" aria-expanded="false" aria-controls="propose-form">Propose your range</button>
+          <p id="eoo" class="muted" hidden></p>
           <div id="propose-form" hidden>
             <div class="field"><label for="author">Display name</label><input id="author" autocomplete="name"></div>
-            <div class="field"><label for="sources">Sources and evidence (required)</label><textarea id="sources" rows="2" placeholder="Citations, expert knowledge, links"></textarea></div>
+            <div class="field"><label for="sources">Sources and evidence (required)</label><textarea id="sources" rows="2" placeholder="Cite specimens (catalogue no.), records (GBIF/iNat IDs) or publications that justify each change"></textarea></div>
             <details id="me">
               <summary>More about you (optional)</summary>
               <div class="field"><label for="github">GitHub username</label><input id="github" autocomplete="username"></div>
@@ -143,7 +144,9 @@
             <details id="iucn">
               <summary>Export for Red List assessors</summary>
               <p class="muted">IUCN Mapping Standards v1.16 attributes, as GeoJSON. Exports your drawing, or the ticked community ranges if nothing is drawn.</p>
+              <p id="iucn-sel" class="muted" hidden>Codes for the selected polygon. Unselected polygons use the defaults below.</p>
               <div id="iucn-codes"></div>
+              <div class="field"><label for="iucn-status">Map status</label><select id="iucn-status"></select></div>
               <button id="export-iucn" type="button">Export for Red List assessors</button>
             </details>
           </div>

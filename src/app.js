@@ -12,6 +12,7 @@ import { initLegend } from './legend.js';
 import { initIucnUi } from './iucn-ui.js';
 import { initRangeCheck } from './rangecheck-ui.js';
 import { initReshape } from './reshape-ui.js';
+import { initEoo } from './eoo-ui.js';
 import { initCopy } from './copy.js';
 import { initSteps } from './steps.js';
 
@@ -33,7 +34,8 @@ if (!touch) map.addControl(new maplibregl.NavigationControl(), 'top-right'); // 
 const fitPad = narrow ? { top: 70, bottom: 20, left: 20, right: 20 } : 40;
 
 const setLegend = initLegend(map);
-const rangeCheck = initRangeCheck({ map, state, onChange: () => updateLegend(), drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
+const rangeCheck = initRangeCheck({ map, state, onChange: () => { updateLegend(); eooUi(); }, drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
+const eooUi = initEoo({ $, draw: () => draw, points: () => rangeCheck.points() });
 const say = t => { $('msg').textContent = t; };
 const steps = initSteps({ state, draw: () => draw, $ }); steps();
 const mapReady = new Promise(res => map.once('load', res));
@@ -58,12 +60,12 @@ const syncTools = () => {
 };
 const setTool = m => { if (draw) { draw.setMode(m); syncTools(); } };
 // The propose card appears once at least one finished shape exists.
-const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); steps(); };
+const syncCard = () => { const n = draw?.all().length; $('propose-box').hidden = !n; eooUi(); $('draw-hint').hidden = !!n; reshape.sync(n); dimSource(n); rangeCheck.refresh(); steps(); };
 const reshape = initReshape({ draw: () => draw, say });
 const { copyRange, dimSource } = initCopy({ map, state, draw: () => draw, reshape, setRustgis });
 // After a finished polygon/freehand shape, leave the drawing tool (deferred: Terra Draw is still closing the mode).
 const drawn = () => setTimeout(() => { setTool('static'); say('Range drawn. Check it, then propose it below.'); });
-mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; syncTools(); }, syncCard, reshape.apply, () => reshape.reset(), drawn); syncTools(); });
+mapReady.then(() => { draw = initDraw(map, id => { $('t-delete').disabled = id == null; iucn.select(id); syncTools(); }, syncCard, reshape.apply, () => reshape.reset(), drawn); syncTools(); });
 $('open-propose').addEventListener('click', () => openPropose($('propose-form').hidden));
 function openPropose(open) { $('propose-form').hidden = !open; $('open-propose').setAttribute('aria-expanded', open); }
 syncTools();
@@ -266,7 +268,7 @@ $('propose').addEventListener('click', () => {
   else { download(fc); say(`Range too large for a link. Downloaded; upload it at github.com/PollockLab/rangecraft under data/ranges/${fc.properties.taxonKey}/ via "Add file > Upload files", then open a pull request.`); }
 });
 
-initIucnUi({ $, state, draw: () => draw, say, writeHash });
+const iucn = initIucnUi({ $, state, draw: () => draw, say, writeHash });
 
 // ---- relay: submit without a GitHub account ----
 const stashDraft = () => relay.saveDraft({ features: draw?.all() ?? [], ...Object.fromEntries(['author', 'github', 'orcid', 'inat', 'sources'].map(k => [k, $(k).value])) });

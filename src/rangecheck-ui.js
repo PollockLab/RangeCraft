@@ -10,7 +10,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   const PLAIN = { outside: 'Records outside your range: range may be too small (or misIDs)', gap: 'Inside your range, no records yet (check effort or habitat)', unmapped: 'Not mapped by this source' };
   const HABITAT = { outside: 'Records outside your range, good habitat: range likely too small', outsideLow: 'Records outside your range, poor habitat: check IDs or the model',
     gap: 'Inside your range, good habitat, no records yet (check effort)', lowgap: 'Inside your range, poor habitat (check the range edge)', survey: 'Good habitat outside, unsurveyed', unmapped: PLAIN.unmapped };
-  let LABELS = PLAIN, present = new Set(), threshold = null, targets = '';
+  let pts = [], LABELS = PLAIN, present = new Set(), threshold = null, targets = '';
   // Samples the raw habitat model over the box in one request; null when it cannot be read.
   async function loadSuit(slug, box) {
     try {
@@ -27,7 +27,7 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   // Fade the GBIF heat map while checking so red outside-range bins stay distinct from dense occurrences.
   const dimOcc = on => map.getLayer('occ') && map.setPaintProperty('occ', 'raster-opacity', on ? 0.35 : 1);
   function clear(msg = '') {
-    rcRun++;
+    rcRun++; pts = [];
     for (const id of LAYERS) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource('rc')) map.removeSource('rc');
     $('rc-toggle').checked = false;
@@ -72,7 +72,9 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
         suit = await loadSuit(state.official.slug, rc.tilesBox(tiles, size)); why = suit ? 'ok' : 'unreadable';
         if (stale()) return;
       }
-      const res = rc.classify(counts, fc, size, { coverage, suit });
+      const res = rc.classify(counts, fc, size, { coverage, suit }), inRange = rc.inside(fc);
+      // Bin centres (not records) inside the range: GBIF bins are coarse, so the AOO built from them is a screening lower bound.
+      pts = [...counts].filter(([, n]) => n > 0).map(([k]) => rc.centre(...k.split(',').map(Number), size)).filter(c => inRange(...c));
       threshold = res.threshold; LABELS = threshold == null ? PLAIN : HABITAT;
       present = new Set(res.cells.map(c => c.status));
       hasUnmapped = res.unmapped > 0;
@@ -127,5 +129,5 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
   });
   const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range grid cells with records reach.`;
   const legend = () => map.getLayer('rc-fill') ? Object.keys(LABELS).filter(k => threshold == null ? k !== 'unmapped' || hasUnmapped : present.has(k)).map(k => ({ label: LABELS[k], swatch: rc.COLORS[k], ...(threshold != null && k !== 'unmapped' && { title: tip() }) })) : [];
-  return { clear, legend, refresh };
+  return { clear, legend, refresh, points: () => pts };
 }

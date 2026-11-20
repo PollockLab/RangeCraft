@@ -48,7 +48,7 @@ export function pickZoom(box, { maxTiles = 64, maxCells = 40000 } = {}) {
 }
 
 // Bin index of a longitude/latitude; bin (i, j) is centred at (-180 + (i + .5) size, 90 - (j + .5) size).
-const centre = (i, j, size) => [-180 + (i + 0.5) * size, 90 - (j + 0.5) * size];
+export const centre = (i, j, size) => [-180 + (i + 0.5) * size, 90 - (j + 0.5) * size];
 
 // Adds the squares of one tile (centres in 4096 tile units) into counts, a Map "i,j" -> records.
 export function addTile(counts, tile, squares) {
