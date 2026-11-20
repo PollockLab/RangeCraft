@@ -15,6 +15,7 @@ const HINT = 'Cut area draws freehand: click once, move around the area, click a
 
 export function initPatch({ map, state, $, say, draw, sync, showOfficial, recordsIn, legend }) {
   const bases = new Map(); // official slug -> outline FeatureCollection (view only, never exported)
+  const baseName = () => (parseInatSlug(state.patch?.base) ? 'iNaturalist range' : 'official range');
   const base = slug => { if (!bases.has(slug)) bases.set(slug, loadBase(slug, fetchOutline).catch(e => { bases.delete(slug); throw e; })); return bases.get(slug); };
   const fc = coords => ({ type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) });
   const props = s => s.op === 'recode' ? { op: s.op, presence: s.presence } : { op: s.op };
@@ -80,7 +81,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
     if (state.taxon !== taxon) return false;
     render(); sync();
     $('open-propose').textContent = 'Propose this edit';
-    $('t-cut').disabled = false; $('t-cut').title = 'Cut area: sketch a shape to remove from the official range (saved as a cut shape)';
+    $('t-cut').disabled = false; $('t-cut').title = 'Cut area: sketch a shape to remove from the ' + baseName() + ' (saved as a cut shape)';
     $('official-edit').textContent = 'Stop patch editing';
     $('change-msg').placeholder = 'e.g. Cut the north edge: records there are introduced (cite them)';
     return true;
@@ -110,9 +111,9 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
       if (n < 1) { state.patch.shapes.pop(); return say('Nothing changed: draw a larger shape that overlaps the range.'); }
       render(); sync(); cutRun++;
       reason.hidden = op === 'add';
-      if (op === 'add') return say(`Added ${km(n)} km² to the official range.`);
+      if (op === 'add') return say(`Added ${km(n)} km² to the ${baseName()}.`);
       // Reason for the cut: a mapping error removes the area; extirpated keeps it as a recode (IUCN presence 5 Extinct / 4 Possibly Extinct).
-      const shape = state.patch.shapes.at(-1), head = `Cut ${km(n)} km² from the official range.`, run = cutRun, taxon = state.taxon;
+      const shape = state.patch.shapes.at(-1), head = `Cut ${km(n)} km² from the ${baseName()}.`, run = cutRun, taxon = state.taxon;
       reason.querySelector('input[value=cut]').checked = true;
       let k = null;
       const report = () => {
