@@ -56,3 +56,5 @@ def test_imported_source_credits_publisher_not_committer():
     from rangelib import imported_source
     assert imported_source({"author": "USGS GAP", "derived_from": "USGS GAP", "basis": "new"}) == "USGS GAP"
     assert imported_source({"author": "Ana", "derived_from": "USGS GAP", "basis": "edit"}) is None
+    assert imported_source({"author": "USGS GAP", "derived_from": "USGS GAP", "basis": "new", "github": "x"}) is None
+    assert imported_source({"author": "Me Inc", "derived_from": "Me Inc", "basis": "new"}) is None

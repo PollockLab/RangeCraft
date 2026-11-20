@@ -130,9 +130,17 @@ NOREPLY = re.compile(r"^(?:\d+\+)?([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)@use
                      re.IGNORECASE)
 
 
+PUBLISHERS = frozenset({"USGS GAP", "Fisheries and Oceans Canada"})
+
+
 def imported_source(meta: dict) -> str | None:
-    """Publisher name for a range imported verbatim from a published source, credited to it, not the committer."""
-    return meta["author"] if meta.get("derived_from") == meta.get("author") and meta.get("basis") == "new" else None
+    """Publisher credited for a range imported verbatim from a published source, instead of the committer.
+
+    Only allowlisted publishers, and only files with no github owner: validate.py lets just maintainers
+    add those, so a contributor cannot claim a publisher's slot by writing its name."""
+    a = meta.get("author")
+    ok = a in PUBLISHERS and meta.get("derived_from") == a and meta.get("basis") == "new" and not meta.get("github")
+    return a if ok else None
 
 
 def identity_from_commit(email: str, name: str) -> tuple[str, str]:

@@ -100,7 +100,8 @@ def load_voters(taxon_dir: Path) -> dict:
         except RangeError as e:
             print(f"skip {p.name}: {e}", file=sys.stderr)
             continue
-        who = imported_source(r["meta"]) or contributor(p, r["meta"]["author"])
+        src = imported_source(r["meta"])
+        who = f"source:{src}" if src else f"git:{contributor(p, r['meta']['author'])}"
         key = (str(r["meta"]["created"]), p.name)
         if who not in latest or key > latest[who][0]:
             latest[who] = (key, r["geometry"])
