@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, bin, verdict, summaryItems, summaryTip, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, CONUS } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, bin, verdict, summaryItems, summaryTip, cellArea, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -177,4 +177,19 @@ test('lowRecords counts records in outsideLow bins and drives the ID-check sente
   assert.equal(r.lowRecords, 7);
   assert.equal(summaryItems(r).at(-1), '7 records outside the range in low-suitability habitat: worth an ID check');
   assert.equal(summaryItems({ total: 1, outsidePct: 1, gapPct: 1, threshold: 40, lowRecords: 1500 })[2], 'over 1,000 records outside the range in low-suitability habitat: worth an ID check');
+});
+
+test('cellArea: 1x1 degree cell at the equator is about 12,364 km2', () => {
+  assert.ok(Math.abs(cellArea({ w: 0, s: 0, e: 1, n: 1 }) / 12364 - 1) < 0.01);
+});
+
+test('area of habitat counts only in-range cells at or above the threshold', () => {
+  const suit = (lon, lat) => lon < 6 ? 80 : lon < 10 ? 10 : 80; // lon 10+ is suitable but outside the range
+  const r = classify(new Map([...[1, 3, 5].flatMap(x => [81, 83, 85, 87, 89].map(y => [key(x, y), 3])), [key(7, 89), 2], [key(12, 89), 1]]), range, 2, { suit }); // 15 suitable + 1 unsuitable record cell, so the 10% threshold is 80
+  assert.ok(r.aohKm2 > 0 && r.aohKm2 < r.rangeKm2);
+  assert.ok(Math.abs(r.rangeKm2 / cellArea({ w: 0, s: 80, e: 10, n: 90 }) - 1) < 1e-9);
+  assert.match(summaryItems(r)[2], /^Area of habitat \(screening\): about [\d,]+ km² of your range is in cells the habitat model rates suitable \(\d+% of the range\)$/);
+  const none = classify(new Map([[key(1, 89), 3]]), range, 2);
+  assert.equal(none.aohKm2, null);
+  assert.ok(!summaryItems(none).some(t => /Area of habitat/.test(t)));
 });

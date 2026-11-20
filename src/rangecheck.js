@@ -68,6 +68,7 @@ export function addTile(counts, tile, squares) {
 export function classify(counts, fc, size, { outsideMin = 1, coverage = null, suit = null } = {}) {
   const test = inside(fc), box = bbox(fc), cells = [], covered = coverage && inside(coverage), outs = [], vals = [], seen = new Map();
   const rin = (i, j) => { const k = `${i},${j}`; if (!seen.has(k)) seen.set(k, test(...centre(i, j, size))); return seen.get(k); };
+  const inRange = [];
   let total = 0, outRecords = 0, lowRecords = 0, confirmed = 0, gaps = 0, unmapped = 0;
   for (const [k, count] of counts) {
     const [i, j] = k.split(',').map(Number), [x, y] = centre(i, j, size);
@@ -75,7 +76,7 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       unmapped += count; cells.push({ status: 'unmapped', count, ...cellBox(i, j, size) }); continue;
     }
     total += count;
-    if (rin(i, j)) { confirmed++; if (suit) { const v = suit(x, y); if (v != null) vals.push(v); } }
+    if (rin(i, j)) { confirmed++; let v = null; if (suit) { v = suit(x, y); if (v != null) vals.push(v); } inRange.push([v, cellArea(cellBox(i, j, size))]); }
     else { outRecords += count; if (count >= outsideMin) outs.push({ i, j, x, y, count }); }
   }
   vals.sort((a, b) => a - b);
@@ -92,6 +93,7 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       if (counts.has(`${i},${j}`) || !rin(i, j)) continue;
       const [x, y] = centre(i, j, size), good = ok(x, y);
       gaps++; if (!good) lowGaps++;
+      inRange.push([threshold == null ? null : suit(x, y), cellArea(cellBox(i, j, size))]);
       cells.push({ status: good ? 'gap' : 'lowgap', count: 0, score: threshold == null ? null : suit(x, y), ...cellBox(i, j, size) });
     }
   if (threshold != null) for (let j = j0 - 1; j <= j1 + 1; j++) // one bin ring around the range: suitable, no records, a neighbour inside
@@ -101,8 +103,11 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       if ((covered && !covered(x, y)) || !ok(x, y) || ![-1, 0, 1].some(dj => [-1, 0, 1].some(di => (di || dj) && rin(i + di, j + dj)))) continue;
       survey++; cells.push({ status: 'survey', count: 0, score: suit(x, y), ...cellBox(i, j, size) });
     }
-  return { cells, total, unmapped, confirmed, gaps, lowGaps, survey, lowRecords, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
+  const rangeKm2 = inRange.reduce((a, [, m]) => a + m, 0), aohKm2 = threshold == null ? null : inRange.reduce((a, [v, m]) => a + (v != null && v >= threshold ? m : 0), 0);
+  return { cells, aohKm2, rangeKm2, total, unmapped, confirmed, gaps, lowGaps, survey, lowRecords, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
 }
+// Area in km2 of a w/s/e/n cell on a sphere of mean Earth radius.
+export const cellArea = ({ w, s, e, n }) => 6371.0088 ** 2 * ((e - w) * Math.PI / 180) * (Math.sin(n * Math.PI / 180) - Math.sin(s * Math.PI / 180));
 const cellBox = (i, j, size) => ({ w: -180 + i * size, s: 90 - (j + 1) * size, e: -180 + (i + 1) * size, n: 90 - j * size });
 
 // Raw SDM scores are 0-100 and uncalibrated across species, hence the per-species threshold. why: 'none' (no model), 'unreadable', or 'ok'.
@@ -146,6 +151,7 @@ export const verdict = (r, ref) => {
 export const summaryItems = r => !r.total ? [] : [
   `${Math.round(r.outsidePct)}% of records fall outside this range`,
   `${Math.round(r.gapPct)}% of the range has no records yet`,
+  r.aohKm2 != null && r.rangeKm2 > 0 && `Area of habitat (screening): about ${Math.round(r.aohKm2).toLocaleString('en-US')} km² of your range is in cells the habitat model rates suitable (${Math.round(100 * r.aohKm2 / r.rangeKm2)}% of the range)`,
   r.threshold != null && r.survey && `${r.survey} grid cell${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records: worth surveying`,
   r.threshold != null && r.lowRecords && `${bin(r.lowRecords)} record${r.lowRecords === 1 ? '' : 's'} outside the range in low-suitability habitat: worth an ID check`,
 ].filter(Boolean);
