@@ -68,7 +68,7 @@ export function addTile(counts, tile, squares) {
 export function classify(counts, fc, size, { outsideMin = 1, coverage = null, suit = null } = {}) {
   const test = inside(fc), box = bbox(fc), cells = [], covered = coverage && inside(coverage), outs = [], vals = [], seen = new Map();
   const rin = (i, j) => { const k = `${i},${j}`; if (!seen.has(k)) seen.set(k, test(...centre(i, j, size))); return seen.get(k); };
-  let total = 0, outRecords = 0, confirmed = 0, gaps = 0, unmapped = 0;
+  let total = 0, outRecords = 0, lowRecords = 0, confirmed = 0, gaps = 0, unmapped = 0;
   for (const [k, count] of counts) {
     const [i, j] = k.split(',').map(Number), [x, y] = centre(i, j, size);
     if (covered && !covered(x, y)) {
@@ -81,7 +81,10 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
   vals.sort((a, b) => a - b);
   const threshold = vals.length ? vals[Math.floor(0.1 * vals.length)] : null;
   const ok = (x, y) => { if (threshold == null) return true; const v = suit(x, y); return v != null && v >= threshold; };
-  for (const o of outs) cells.push({ status: ok(o.x, o.y) ? 'outside' : 'outsideLow', count: o.count, ...cellBox(o.i, o.j, size) });
+  for (const o of outs) {
+    const good = ok(o.x, o.y); if (!good) lowRecords += o.count;
+    cells.push({ status: good ? 'outside' : 'outsideLow', count: o.count, ...cellBox(o.i, o.j, size) });
+  }
   const j0 = Math.floor((90 - box[3]) / size), j1 = Math.floor((90 - box[1]) / size), i0 = Math.floor((box[0] + 180) / size), i1 = Math.floor((box[2] + 180) / size);
   let lowGaps = 0, survey = 0;
   for (let j = j0; j <= j1; j++)
@@ -98,7 +101,7 @@ export function classify(counts, fc, size, { outsideMin = 1, coverage = null, su
       if ((covered && !covered(x, y)) || !ok(x, y) || ![-1, 0, 1].some(dj => [-1, 0, 1].some(di => (di || dj) && rin(i + di, j + dj)))) continue;
       survey++; cells.push({ status: 'survey', count: 0, score: suit(x, y), ...cellBox(i, j, size) });
     }
-  return { cells, total, unmapped, confirmed, gaps, lowGaps, survey, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
+  return { cells, total, unmapped, confirmed, gaps, lowGaps, survey, lowRecords, threshold, outsidePct: total ? (100 * outRecords) / total : 0, gapPct: confirmed + gaps ? (100 * gaps) / (confirmed + gaps) : 0 };
 }
 const cellBox = (i, j, size) => ({ w: -180 + i * size, s: 90 - (j + 1) * size, e: -180 + (i + 1) * size, n: 90 - j * size });
 
@@ -136,7 +139,8 @@ export const summaryLine = (r, ref, covered) => {
 // Habitat-checked extras for the summary; '' when nothing was habitat-checked.
 export const habitatLine = r => r.threshold == null ? '' : [
   r.survey && `${r.survey} bin${r.survey === 1 ? '' : 's'} just outside the range look${r.survey === 1 ? 's' : ''} suitable but ${r.survey === 1 ? 'has' : 'have'} no records.`,
-  r.lowGaps && `${r.lowGaps} in-range bin${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`].filter(Boolean).join(' ');
+  r.lowGaps && `${r.lowGaps} in-range bin${r.lowGaps === 1 ? ' has' : 's have'} low suitability.`,
+  r.lowRecords && `${r.lowRecords} record${r.lowRecords === 1 ? '' : 's'} in low-suitability habitat outside the range ${r.lowRecords === 1 ? 'is' : 'are'} worth an ID check.`].filter(Boolean).join(' ');
 
 const csvCell = v => /[",\n]/.test(v = String(v)) ? `"${v.replace(/"/g, '""')}"` : v;
 // CSV of up to `limit` survey (frontier) and suitable-gap bins, best habitat score first. Header only when there are none.
@@ -156,3 +160,6 @@ export const toGeoJSON = cells => ({
   features: cells.map(c => ({ type: 'Feature', properties: { status: c.status, count: c.count, w: c.w, s: c.s, e: c.e, n: c.n },
     geometry: { type: 'Polygon', coordinates: [[[c.w, c.s], [c.e, c.s], [c.e, c.n], [c.w, c.n], [c.w, c.s]]] } })),
 });
+// iNaturalist Identify page for a bin: records of the taxon that still need or have an ID, for checking misidentifications.
+export const inatIdentifyUrl = (name, c) =>
+  `https://www.inaturalist.org/observations/identify?taxon_name=${encodeURIComponent(name)}&swlat=${c.s}&swlng=${c.w}&nelat=${c.n}&nelng=${c.e}&quality_grade=needs_id,research`;

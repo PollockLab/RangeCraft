@@ -114,6 +114,8 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
       }
       el.append(Object.assign(document.createElement('small'), { textContent: 'No records is not absence: it may only mean nobody has looked.' }));
     }
+    if (p.status === 'outside' || p.status === 'outsideLow')
+      el.append(Object.assign(document.createElement('a'), { href: rc.inatIdentifyUrl(state.taxon.name, p), textContent: 'Help verify these IDs on iNaturalist', target: '_blank', rel: 'noopener' }));
     new maplibregl.Popup().setLngLat(e.lngLat).setDOMContent(el).addTo(map);
   });
   const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range bins with records reach.`;

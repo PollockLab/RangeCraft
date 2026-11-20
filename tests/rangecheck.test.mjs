@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, summaryLine, habitatLine, surveyCsv, gbifCellUrl, inatCellUrl, CONUS } from '../src/rangecheck.js';
+import { bbox, inside, pickZoom, addTile, binSize, classify, sdmNote, sampler, summaryLine, habitatLine, surveyCsv, gbifCellUrl, inatCellUrl, inatIdentifyUrl, CONUS } from '../src/rangecheck.js';
 
 const sq = (w, s, e, n) => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const fc = (...rings) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings } }] });
@@ -155,4 +155,18 @@ test('habitatLine counts survey and low bins, empty without a model', () => {
   assert.equal(habitatLine({ threshold: 40, survey: 12, lowGaps: 0 }), '12 bins just outside the range look suitable but have no records.');
   assert.match(habitatLine({ threshold: 40, survey: 1, lowGaps: 1 }), /^1 bin just outside the range looks suitable but has no records\. 1 in-range bin has low suitability\.$/);
   assert.equal(habitatLine({ threshold: 40, survey: 0, lowGaps: 0 }), '');
+});
+
+test('inatIdentifyUrl filters taxon, bbox and quality grade', () => {
+  const u = new URL(inatIdentifyUrl('Lithobates sylvaticus', { s: 1, w: 2, n: 3, e: 4 }));
+  assert.equal(u.pathname, '/observations/identify');
+  assert.deepEqual([...u.searchParams], [['taxon_name', 'Lithobates sylvaticus'], ['swlat', '1'], ['swlng', '2'], ['nelat', '3'], ['nelng', '4'], ['quality_grade', 'needs_id,research']]);
+});
+
+test('lowRecords counts records in outsideLow bins and drives the ID-check sentence', () => {
+  const r = classify(new Map([['5,5', 3], ['5,6', 3], ['20,5', 7], ['21,5', 4]]), fc(sq(-180 + 5, 90 - 7, -180 + 7, 90 - 5)), 1, { suit: x => x < -170 ? 80 : x < -159 ? 10 : 80 });
+  assert.equal(r.lowRecords, 7);
+  assert.match(habitatLine(r), /7 records in low-suitability habitat outside the range are worth an ID check\./);
+  assert.match(habitatLine({ threshold: 40, lowRecords: 1 }), /^1 record in low-suitability habitat outside the range is worth an ID check\.$/);
+  assert.equal(habitatLine({ threshold: 40, lowRecords: 0 }), '');
 });
