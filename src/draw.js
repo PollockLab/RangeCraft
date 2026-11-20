@@ -1,4 +1,4 @@
-// Terra Draw wiring: polygon, freehand and edit modes on the MapLibre map. The official outline
+// Terra Draw wiring: polygon, freehand, add/cut sketch and edit modes on the MapLibre map. The official outline
 // is a plain map layer, so it never enters this store.
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawFreehandMode, TerraDrawSelectMode, TerraDrawRenderMode } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.module.js';
@@ -11,7 +11,7 @@ export function polygonsOf(gj) {
   return geoms.flatMap(g => g?.type === 'Polygon' ? [g] : g?.type === 'MultiPolygon' ? g.coordinates.map(coordinates => ({ type: 'Polygon', coordinates })) : []);
 }
 
-export function initDraw(map, onSelect = () => {}, onChange = () => {}) {
+export function initDraw(map, onSelect = () => {}, onChange = () => {}, onSketch = () => {}, onEdit = () => {}) {
   const td = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
     modes: [
@@ -25,11 +25,19 @@ export function initDraw(map, onSelect = () => {}, onChange = () => {}) {
   let selected = null;
   td.on('select', id => { selected = id; onSelect(id); });
   td.on('deselect', () => { selected = null; onSelect(null); });
-  td.on('finish', () => onChange());
-  td.on('change', (_ids, type) => type !== 'update' && onChange());
+  // Add/Cut tools draw with the freehand mode; the finished sketch is handed to onSketch(op, polygon) and removed.
+  let sketchOp = null;
+  td.on('finish', id => {
+    if (!sketchOp) return onChange();
+    const f = td.getSnapshot().find(x => x.id === id);
+    td.removeFeatures([id]);
+    if (f) onSketch(sketchOp, f.geometry);
+  });
+  // Sketch strokes are not edits of the range; vertex drags (update) go to onEdit, which stays cheap.
+  td.on('change', (_ids, type) => { if (!sketchOp) type === 'update' ? onEdit() : onChange(); });
   return {
-    mode: () => td.getMode(),
-    setMode: m => td.setMode(m),
+    mode: () => sketchOp ?? td.getMode(),
+    setMode(m) { sketchOp = m === 'add' || m === 'cut' ? m : null; td.setMode(sketchOp ? 'freehand' : m); },
     // Finished polygons only, not helper points or the one being drawn.
     all: () => td.getSnapshot().filter(f => f.geometry.type === 'Polygon' && !f.properties.currentlyDrawing),
     removeSelected() { if (selected == null) return false; td.removeFeatures([selected]); selected = null; onSelect(null); onChange(); return true; },
