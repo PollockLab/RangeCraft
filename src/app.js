@@ -34,7 +34,7 @@ if (!touch) map.addControl(new maplibregl.NavigationControl(), 'top-right'); // 
 const fitPad = narrow ? { top: 70, bottom: 20, left: 20, right: 20 } : 40;
 
 const setLegend = initLegend(map);
-const rangeCheck = initRangeCheck({ map, state, onChange: () => { updateLegend(); eooUi(); }, drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [] });
+const rangeCheck = initRangeCheck({ map, state, onChange: () => { updateLegend(); eooUi(); }, drawing: () => ['polygon', 'freehand'].includes(draw?.mode()), draft: () => draw?.all() ?? [], say: t => say(t) });
 const eooUi = initEoo({ $, draw: () => draw, points: () => rangeCheck.points(), presence: id => iucn.presence(id) });
 const say = t => { $('msg').textContent = t; };
 const steps = initSteps({ state, draw: () => draw, $ }); steps();

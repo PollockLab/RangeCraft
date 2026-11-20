@@ -2,11 +2,12 @@
 import { loadRange, densityTile } from './api.js';
 import * as rc from './rangecheck.js';
 import { sdmRawBox } from './official.js';
+import { fetchCites, addLines } from './cite.js';
 
 const $ = id => document.getElementById(id);
 
 // state: { taxon, official }. Returns { clear, legend }; clear() resets the toggle and layer (call on taxon change).
-export function initRangeCheck({ map, state, onChange, drawing, draft = () => [] }) {
+export function initRangeCheck({ map, state, onChange, drawing, draft = () => [], say = () => {} }) {
   const PLAIN = { outside: 'Records outside your range: range may be too small (or misIDs)', gap: 'Inside your range, no records yet (check effort or habitat)', unmapped: 'Not mapped by this source' };
   const HABITAT = { outside: 'Records outside your range, good habitat: range likely too small', outsideLow: 'Records outside your range, poor habitat: check IDs or the model',
     gap: 'Inside your range, good habitat, no records yet (check effort)', lowgap: 'Inside your range, poor habitat (check the range edge)', survey: 'Good habitat outside, unsurveyed', unmapped: PLAIN.unmapped };
@@ -126,6 +127,17 @@ export function initRangeCheck({ map, state, onChange, drawing, draft = () => []
     }
     if (p.status === 'outside' || p.status === 'outsideLow')
       el.append(Object.assign(document.createElement('a'), { href: rc.inatIdentifyUrl(state.taxon.name, p), textContent: 'Help verify these IDs on iNaturalist', target: '_blank', rel: 'noopener' }));
+    if (p.count > 0) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cite records here', className: 'linkbtn' });
+      b.addEventListener('click', async () => {
+        try {
+          const { text, added } = addLines($('sources').value, await fetchCites(state.taxon.key, p));
+          $('sources').value = text;
+          say(added ? `Added ${added} record${added === 1 ? '' : 's'} to Sources.` : 'No new records to add.');
+        } catch (e) { say(`Could not fetch records: ${e.message}`); }
+      });
+      el.append(b);
+    }
     new maplibregl.Popup().setLngLat(e.lngLat).setDOMContent(el).addTo(map);
   });
   const tip = () => `Suitable = habitat score of at least ${threshold}, which 90% of in-range grid cells with records reach.`;

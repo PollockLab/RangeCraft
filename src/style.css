@@ -100,6 +100,8 @@ footer p { margin:.3rem 0; }
   #legend .lg-toggle { display:block; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
   #legend:not(.open) > div { display:none; }
   #tools button, #tools label.btn, .chip, button.edit, [role=tab], #share, .linkbtn, input { min-height:44px; }
+  #how #how-close, #rc-targets, #rc-blitz, #official-load { min-height:44px; }
+  #rc-blitz { display:inline-flex; align-items:center; }
   .info > summary { min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
   input[type=checkbox] { width:24px; height:24px; }
   #legend { left:.5rem; }
