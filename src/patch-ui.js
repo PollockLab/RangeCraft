@@ -11,7 +11,7 @@ const GREEN = '#2a9d3f', RED = '#d62828', km = n => Math.round(n).toLocaleString
 const cells = n => `${n.toLocaleString('en-US')} grid cell${n === 1 ? '' : 's'}`;
 const HINT = 'Cut area draws freehand: click once, move around the area, click again to finish. For vertex-by-vertex shapes use Polygon.';
 
-export function initPatch({ map, state, $, say, draw, sync, showOfficial, recordsIn }) {
+export function initPatch({ map, state, $, say, draw, sync, showOfficial, recordsIn, legend }) {
   const bases = new Map(); // official slug -> outline FeatureCollection (view only, never exported)
   const base = slug => { if (!bases.has(slug)) bases.set(slug, fetchOutline(slug).catch(e => { bases.delete(slug); throw e; })); return bases.get(slug); };
   const fc = coords => ({ type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) });
@@ -19,26 +19,44 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
 
   const applied = () => fc(applyPatch(state.patch.baseFc, asPatch(), polygonClipping));
   const shapes = () => ({ type: 'FeatureCollection', features: state.patch.shapes.map(s => ({ type: 'Feature', properties: { op: s.op }, geometry: s.geometry })) });
-  function render() {
-    const data = applied();
-    if (map.getSource(SRC)) { map.getSource(SRC).setData(data); return map.getSource(SH).setData(shapes()); }
-    map.addSource(SRC, { type: 'geojson', data });
-    map.addLayer({ id: IDS[0], type: 'fill', source: SRC, paint: { 'fill-color': DRAFT, 'fill-opacity': 0.25 } });
-    map.addLayer({ id: IDS[1], type: 'line', source: SRC, paint: { 'line-color': DRAFT, 'line-width': 3 } });
+  // The add/cut shape layers, shared by patch editing and by viewing published patches.
+  function shapeLayers(data) {
+    if (map.getSource(SH)) return map.getSource(SH).setData(data);
     const by = (a, b) => ['match', ['get', 'op'], 'cut', a, b];
-    map.addSource(SH, { type: 'geojson', data: shapes() });
+    map.addSource(SH, { type: 'geojson', data });
     map.addLayer({ id: SHIDS[0], type: 'fill', source: SH, paint: { 'fill-color': by(RED, GREEN), 'fill-opacity': 0.15 } });
     const isCut = ['==', ['get', 'op'], 'cut'];
     map.addLayer({ id: SHIDS[1], type: 'line', source: SH, filter: ['!', isCut], paint: { 'line-color': GREEN, 'line-width': 2.5 } });
     map.addLayer({ id: SHIDS[2], type: 'line', source: SH, filter: isCut, paint: { 'line-color': RED, 'line-width': 2.5, 'line-dasharray': [2, 1.5] } });
   }
+  function removeShapes() {
+    for (const id of SHIDS) if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(SH)) map.removeSource(SH);
+  }
+  function render() {
+    const data = applied();
+    if (map.getSource(SRC)) { map.getSource(SRC).setData(data); return shapeLayers(shapes()); }
+    map.addSource(SRC, { type: 'geojson', data });
+    map.addLayer({ id: IDS[0], type: 'fill', source: SRC, paint: { 'fill-color': DRAFT, 'fill-opacity': 0.25 } });
+    map.addLayer({ id: IDS[1], type: 'line', source: SRC, paint: { 'line-color': DRAFT, 'line-width': 3 } });
+    shapeLayers(shapes());
+  }
+  // Published patches being viewed (list toggle, History revision): key -> its op features. Never drawn while editing.
+  const views = new Map();
+  function paintViews() {
+    const features = [...views.values()].flat();
+    if (!features.length || state.patch) removeShapes(); else shapeLayers({ type: 'FeatureCollection', features });
+    legend();
+  }
   const PH = $('change-msg').placeholder;
   let cutRun = 0; // bumped by every new shape and by exit, so a slow record count never overwrites a newer message
   function exit() {
     cutRun++;
-    for (const id of [...SHIDS, ...IDS]) if (map.getLayer(id)) map.removeLayer(id);
-    for (const id of [SH, SRC]) if (map.getSource(id)) map.removeSource(id);
+    removeShapes();
+    for (const id of IDS) if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(SRC)) map.removeSource(SRC);
     state.patch = null;
+    views.clear(); legend();
     $('open-propose').textContent = 'Propose your range';
     $('official-edit').textContent = 'Edit (saved as a patch)';
     $('change-msg').placeholder = PH;
@@ -49,6 +67,7 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
     const baseFc = await base(slug);
     if (state.taxon !== taxon) return false;
     if (state.patch) exit();
+    views.clear(); removeShapes();
     state.copy = null;
     draw().load({ type: 'FeatureCollection', features: [] });
     state.patch = { base: slug, baseFc, shapes, parent };
@@ -69,6 +88,14 @@ export function initPatch({ map, state, $, say, draw, sync, showOfficial, record
 
   return {
     active: () => !!state.patch,
+    // Show a published patch's add/cut shapes (data = its file; anything else, or null, clears the key).
+    view(key, data) {
+      const f = data?.properties?.basis === 'official-patch' ? data.features.filter(x => x.properties?.op) : [];
+      if (state.patch || (!f.length && !views.has(key))) return;
+      if (f.length) views.set(key, f); else views.delete(key);
+      paintViews();
+    },
+    viewOps: () => new Set([...views.values()].flat().map(f => f.properties.op)),
     exit,
     sketch(op, geometry) {
       if (new Set(geometry.coordinates[0].map(String)).size < 3) return say(HINT.replace('Cut area', op === 'add' ? 'Add area' : 'Cut area'));

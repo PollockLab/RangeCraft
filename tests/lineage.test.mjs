@@ -59,6 +59,8 @@ test('revisionDiff: added and removed area vs parent; root counts all as added',
   const d = revisionDiff(fc(sq(0, 0, 2)), fc(sq(1, 0, 2)), real);
   assert.ok(Math.abs(d.addedKm2 - d.removedKm2) < 1 && d.addedKm2 > 20000);
   assert.match(changeText(d), /^\+[\d,]+ km² added, −[\d,]+ km² removed\.$/);
+  assert.equal(changeText({ addedKm2: 0.2, removedKm2: 9331 }), '−9,331 km² removed.');
+  assert.equal(changeText({ addedKm2: 0, removedKm2: 0 }), 'No area change.');
   const root = revisionDiff(null, fc(sq(0, 0, 1)), real);
   assert.equal(root.removedKm2, 0);
   assert.ok(root.addedKm2 > 12000);

@@ -105,6 +105,8 @@ footer p { margin:.3rem 0; }
 @media (max-width: 600px) {
   #legend .lg-toggle { display:block; font:inherit; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
   #legend:not(.open) > div { display:none; }
+  #legend { max-height:22vh; overflow-y:auto; } /* map is 55vh: keep the open legend within 40% of it */
+  #legend > div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #tools button, #tools label.btn, .chip, button.edit, button.hist, .hist-panel button, [role=tab], #share, .linkbtn, input { min-height:44px; }
   #how #how-close, #rc-targets, #rc-blitz, #official-load { min-height:44px; }
   #rc-blitz { display:inline-flex; align-items:center; }

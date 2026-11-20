@@ -10,12 +10,13 @@ import { applyPatch } from './patch.js';
 const SRC = 'history-diff', LAYERS = [['history-add', '#2a9d3f', 'add'], ['history-rem', '#d62828', 'rem']];
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-export function initHistory({ map, state, say, edit }) {
+export function initHistory({ map, state, say, edit, view }) {
   let open = null; // { panel, button }
 
   function clearOverlay() {
     for (const [id] of LAYERS) for (const l of [`${id}-line`, id]) if (map.getLayer(l)) map.removeLayer(l);
     if (map.getSource(SRC)) map.removeSource(SRC);
+    view('history', null);
   }
   function clear() { clearOverlay(); open?.panel.remove(); open?.button.setAttribute('aria-expanded', false); open = null; }
 
@@ -41,7 +42,7 @@ export function initHistory({ map, state, say, edit }) {
     // An unmessaged root is the first upload: its sources are a citation, not a change message, so they go in the tooltip.
     const head = pr.message ? `Revision by ${shownName(r.author)}, ${r.created}: '${pr.message.length > 140 ? `${pr.message.slice(0, 139)}…` : pr.message}'. ` : `${edit ? 'Revision' : 'Initial range'} by ${shownName(r.author)}, ${r.created}. `;
     const b = el('button', { type: 'button', className: 'rev', title: pr.message || src }, head, el('span', { className: 'muted', textContent: edit ? changeText(d) : '' }));
-    b.addEventListener('click', () => { overlay(d); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
+    b.addEventListener('click', () => { overlay(d); view('history', fc); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
     return b;
   }
 
