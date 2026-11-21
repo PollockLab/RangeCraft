@@ -16,7 +16,7 @@ export function initHistory({ map, state, say, edit, view }) {
   let auto = null; // { id, fit }: open this range's History on its latest revision, as compare() asks
 
   function clearOverlay() {
-    for (const [id] of LAYERS) for (const l of [`${id}-line`, id]) if (map.getLayer(l)) map.removeLayer(l);
+    for (const [id] of LAYERS) for (const l of [`${id}-dot`, `${id}-line`, id]) if (map.getLayer(l)) map.removeLayer(l);
     if (map.getSource(SRC)) map.removeSource(SRC);
     view('history', null);
   }
@@ -25,10 +25,17 @@ export function initHistory({ map, state, say, edit, view }) {
   function overlay(d) {
     clearOverlay();
     const f = (kind, coordinates) => ({ type: 'Feature', properties: { kind }, geometry: { type: 'MultiPolygon', coordinates } });
-    map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [f('add', d.added), f('rem', d.removed)] } });
+    // Edits are often thin slivers along a border, invisible zoomed out: each piece also gets a dot that fades as you zoom in.
+    const dot = (kind, poly) => { const r = poly[0], n = r.length; return { type: 'Feature', properties: { kind }, geometry: { type: 'Point', coordinates: [r.reduce((a, c) => a + c[0], 0) / n, r.reduce((a, c) => a + c[1], 0) / n] } }; };
+    const span = p => { const xs = p[0].map(c => c[0]), ys = p[0].map(c => c[1]); return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)); };
+    const top = (kind, ps) => [...ps].sort((a, b) => span(b) - span(a)).slice(0, 5).map(p => dot(kind, p)); // the five biggest of each, or edge noise floods the map
+    const dots = [...top('add', d.added), ...top('rem', d.removed)];
+    map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [f('add', d.added), f('rem', d.removed), ...dots] } });
     for (const [id, color, kind] of LAYERS) {
-      map.addLayer({ id, type: 'fill', source: SRC, filter: ['==', ['get', 'kind'], kind], paint: { 'fill-color': color, 'fill-opacity': 0.6 } });
-      map.addLayer({ id: `${id}-line`, type: 'line', source: SRC, filter: ['==', ['get', 'kind'], kind], paint: { 'line-color': color, 'line-width': 2 } });
+      const is = ['all', ['==', ['get', 'kind'], kind], ['==', ['geometry-type'], 'Polygon']];
+      map.addLayer({ id, type: 'fill', source: SRC, filter: is, paint: { 'fill-color': color, 'fill-opacity': 0.75 } });
+      map.addLayer({ id: `${id}-line`, type: 'line', source: SRC, filter: is, paint: { 'line-color': color, 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 3, 9, 2] } });
+      map.addLayer({ id: `${id}-dot`, type: 'circle', source: SRC, filter: ['all', ['==', ['get', 'kind'], kind], ['==', ['geometry-type'], 'Point']], paint: { 'circle-color': color, 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2, 'circle-opacity': ['interpolate', ['linear'], ['zoom'], 6, 0.9, 8, 0], 'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 6, 1, 8, 0] } });
     }
   }
 

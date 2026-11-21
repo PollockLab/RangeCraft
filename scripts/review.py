@@ -124,7 +124,13 @@ def diff_map(new: BaseGeometry, old: BaseGeometry) -> tuple[str, int]:
             continue
         feats.append(f)
         size += n
-    return json.dumps({"type": "FeatureCollection", "features": feats}, separators=(",", ":")), left
+    # Slivers vanish at the zoom GitHub opens on, so the biggest changes also get a pin.
+    pins = [{"type": "Feature", "properties": {"change": k, "marker-color": STYLE[k]["fill"], "marker-size": "small"},
+             "geometry": {"type": "Point", "coordinates": [round(c.x, 4), round(c.y, 4)]}}
+            for k in ("added", "removed")
+            for _, _, g in [t for t in parts if t[1] == k and area_km2(t[2]) >= 1][:5]
+            for c in [g.representative_point()]]
+    return json.dumps({"type": "FeatureCollection", "features": feats + pins}, separators=(",", ":")), left
 
 
 def map_block(new: BaseGeometry, old: BaseGeometry) -> list[str]:
