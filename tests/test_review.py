@@ -8,11 +8,15 @@ from shapely.geometry import box, shape
 def test_diff_map_layers_and_budget(monkeypatch):
     new, old = box(0, 0, 2, 1), box(1, 0, 3, 1)
     text, left = review.diff_map(new, old)
-    got = {f["properties"]["change"]: shape(f["geometry"]) for f in json.loads(text)["features"]}
+    feats = json.loads(text)["features"]
+    got = {f["properties"]["change"]: shape(f["geometry"]) for f in feats if f["geometry"]["type"] != "Point"}
+    pins = {f["properties"]["change"]: shape(f["geometry"]) for f in feats if f["geometry"]["type"] == "Point"}
+    assert pins.keys() == {"added", "removed"} and pins["added"].within(box(0, 0, 1, 1))
     assert got["added"].equals(box(0, 0, 1, 1)) and got["removed"].equals(box(2, 0, 3, 1))
     assert got["kept"].equals(box(1, 0, 2, 1)) and left == 0
     monkeypatch.setattr(review, "MAX_GEOJSON", 1)
-    assert review.diff_map(new, old) == ('{"type":"FeatureCollection","features":[]}', 3)
+    text, left = review.diff_map(new, old)
+    assert left == 3 and all(f["geometry"]["type"] == "Point" for f in json.loads(text)["features"])
 
 
 def test_patch_applies_add_then_cut():
@@ -28,10 +32,18 @@ def test_plain_neutralises_markdown():
     assert re.search(r"(?<!\\)[`\[\]()<>#@]", out) is None  # every control character escaped
 
 
-def test_preview_link_only_for_safe_names(monkeypatch):
+def test_preview_url_only_for_safe_names(monkeypatch):
     monkeypatch.setattr(review, "git", lambda *a: "a" * 40 + "\n")
-    assert "preview=" + "a" * 40 + "/1/x-1.geojson)" in review.preview_link("data/ranges/1/x-1.geojson", "h")
-    assert review.preview_link("data/ranges/1/x)[y](z.geojson", "h") == ""
+    url = review.preview_url("data/ranges/1/x-1.geojson", "h", "1/usgs-gap")
+    assert url.endswith("preview=" + "a" * 40 + "/1/x-1.geojson&vs=1/usgs-gap")
+    assert review.preview_url("data/ranges/1/x)[y](z.geojson", "h") == ""
+    assert "vs=" not in review.preview_url("data/ranges/1/x.geojson", "h", "1/a)(b")
+
+
+def test_largest_changes_link_to_each_piece():
+    out = review.largest_changes(box(0, 0, 2, 1), box(1, 0, 3, 1), "U")
+    assert any(o.startswith("- [🟩") and "&at=" in o and "0.50°N, 0.50°E" in o for o in out)
+    assert any(o.startswith("- [🟥") and "2.50°E" in o for o in out)
 
 
 def test_records_skips_empty_and_survives_gbif_outage(monkeypatch):

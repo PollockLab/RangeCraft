@@ -13,9 +13,10 @@ const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.crea
 
 export function initHistory({ map, state, say, edit, view }) {
   let open = null; // { panel, button }
+  let auto = null; // { id, fit }: open this range's History on its latest revision, as compare() asks
 
   function clearOverlay() {
-    for (const [id] of LAYERS) for (const l of [`${id}-line`, id]) if (map.getLayer(l)) map.removeLayer(l);
+    for (const [id] of LAYERS) for (const l of [`${id}-dot`, `${id}-line`, id]) if (map.getLayer(l)) map.removeLayer(l);
     if (map.getSource(SRC)) map.removeSource(SRC);
     view('history', null);
   }
@@ -24,10 +25,17 @@ export function initHistory({ map, state, say, edit, view }) {
   function overlay(d) {
     clearOverlay();
     const f = (kind, coordinates) => ({ type: 'Feature', properties: { kind }, geometry: { type: 'MultiPolygon', coordinates } });
-    map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [f('add', d.added), f('rem', d.removed)] } });
+    // Edits are often thin slivers along a border, invisible zoomed out: each piece also gets a dot that fades as you zoom in.
+    const dot = (kind, poly) => { const r = poly[0], n = r.length; return { type: 'Feature', properties: { kind }, geometry: { type: 'Point', coordinates: [r.reduce((a, c) => a + c[0], 0) / n, r.reduce((a, c) => a + c[1], 0) / n] } }; };
+    const span = p => { const xs = p[0].map(c => c[0]), ys = p[0].map(c => c[1]); return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)); };
+    const top = (kind, ps) => [...ps].sort((a, b) => span(b) - span(a)).slice(0, 5).map(p => dot(kind, p)); // the five biggest of each, or edge noise floods the map
+    const dots = [...top('add', d.added), ...top('rem', d.removed)];
+    map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [f('add', d.added), f('rem', d.removed), ...dots] } });
     for (const [id, color, kind] of LAYERS) {
-      map.addLayer({ id, type: 'fill', source: SRC, filter: ['==', ['get', 'kind'], kind], paint: { 'fill-color': color, 'fill-opacity': 0.6 } });
-      map.addLayer({ id: `${id}-line`, type: 'line', source: SRC, filter: ['==', ['get', 'kind'], kind], paint: { 'line-color': color, 'line-width': 2 } });
+      const is = ['all', ['==', ['get', 'kind'], kind], ['==', ['geometry-type'], 'Polygon']];
+      map.addLayer({ id, type: 'fill', source: SRC, filter: is, paint: { 'fill-color': color, 'fill-opacity': 0.75 } });
+      map.addLayer({ id: `${id}-line`, type: 'line', source: SRC, filter: is, paint: { 'line-color': color, 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 3, 9, 2] } });
+      map.addLayer({ id: `${id}-dot`, type: 'circle', source: SRC, filter: ['all', ['==', ['get', 'kind'], kind], ['==', ['geometry-type'], 'Point']], paint: { 'circle-color': color, 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2, 'circle-opacity': ['interpolate', ['linear'], ['zoom'], 6, 0.9, 8, 0], 'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 6, 1, 8, 0] } });
     }
   }
 
@@ -43,7 +51,7 @@ export function initHistory({ map, state, say, edit, view }) {
     // An unmessaged root is the first upload: its sources are a citation, not a change message, so they go in the tooltip.
     const head = pr.message ? `Revision by ${shownName(r.author)}, ${r.created}: '${pr.message.length > 140 ? `${pr.message.slice(0, 139)}…` : pr.message}'. ` : `${edit ? 'Revision' : 'Initial range'} by ${shownName(r.author)}, ${r.created}. `;
     const b = el('button', { type: 'button', className: 'rev', title: pr.message || src }, head, el('span', { className: 'muted', textContent: edit ? changeText(d) : '' }));
-    b.addEventListener('click', () => { overlay(d); view('history', fc); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
+    b.addEventListener('click', () => { overlay(d); view('history', fc); b.fitChanges?.(d); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
     return b;
   }
 
@@ -56,6 +64,8 @@ export function initHistory({ map, state, say, edit, view }) {
     const [rev, forks] = await Promise.all([settle(log(graph, r.id)), settle(node.children)]);
     if (open?.panel !== panel) return;
     panel.querySelector('.hist-body').replaceChildren(...list(rev, 'Revisions, oldest first'), ...list(forks, 'Forks of this revision'));
+    const last = auto?.id === r.id && [...panel.querySelectorAll('.rev')].at(rev.length - 1);
+    if (last) { if (auto.fit) last.fitChanges = fitChanges; auto = null; last.click(); delete last.fitChanges; }
   }
 
   // Scroll the log clear of the sticky propose card that covers the bottom of the side panel.
@@ -82,5 +92,17 @@ export function initHistory({ map, state, say, edit, view }) {
     return b;
   }
 
-  return { button, clear };
+  function fitChanges(d) {
+    const b = new maplibregl.LngLatBounds(), walk = c => (typeof c[0] === 'number' ? b.extend(c) : c.forEach(walk));
+    walk([d.added, d.removed]);
+    if (!b.isEmpty()) map.fitBounds(b, { padding: 60, maxZoom: 9 });
+  }
+
+  // Show what range `id` changes against its parent: open its History on the latest revision, fit to the change if asked.
+  function compare(id, fit = true) {
+    auto = { id, fit };
+    document.getElementById(`v-${id}`)?.closest('li')?.querySelector('.hist')?.click();
+  }
+
+  return { button, clear, compare };
 }

@@ -24,18 +24,22 @@ export function parseHash(hash) {
   for (const k of DEFAULT_ON) s[k] = p.get(k) !== '0';
   const pv = p.get('preview') || ''; // a range proposed in a pull request: <commit sha>/<taxon>/<file>
   if (new RegExp(`^[0-9a-f]{40}/${taxon}/[\\w.-]+\\.geojson$`).test(pv)) s.preview = pv;
+  if (s.preview && ID_RE.test(p.get('vs') || '')) s.vs = p.get('vs'); // the range the preview edits: its diff is shown
   const at = (p.get('at') || '').split('/').map(Number);
   if (at.length === 3 && at.every(Number.isFinite) && at[0] >= 0 && at[0] <= 22 && Math.abs(at[1]) <= 90 && Math.abs(at[2]) <= 180) s.at = at;
   return s;
 }
 
-// Add the proposed range to the index so it lists and draws next to the published ones. Never throws.
-export async function addPreview(index, preview) {
+// Add the proposed range to the index so it lists and draws next to the published ones, as a revision of `vs` when given.
+// Returns its index id, or null when it cannot be loaded. Never throws.
+export async function addPreview(index, preview, vs) {
   const [sha, taxon, name] = preview.split('/');
   const file = `https://raw.githubusercontent.com/${REPO}/${sha}/data/ranges/${taxon}/${name}`;
-  if (index.some(r => r.file === file)) return;
+  const id = `pr-${sha.slice(0, 7)}`;
+  if (index.some(r => r.file === file)) return id;
   try {
     const p = (await loadRange(file)).properties ?? {};
-    index.push({ id: `pr-${sha.slice(0, 7)}`, taxonKey: taxon, file, author: `${p.author || 'Proposed'} (proposed)`, created: String(p.created ?? ''), basis: p.basis });
-  } catch { /* the PR commit is gone or not public: show the published ranges only */ }
+    index.push({ id, taxonKey: taxon, file, author: `${p.author || 'Proposed'} (proposed)`, created: String(p.created ?? ''), basis: p.basis, parent: vs ? `data/ranges/${vs}.geojson` : p.parent });
+    return id;
+  } catch { return null; } // the PR commit is gone or not public: show the published ranges only
 }

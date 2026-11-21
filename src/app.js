@@ -471,7 +471,7 @@ async function fromHash() {
   if (!s || (state.taxon?.key === s.taxon && location.hash === lastHash)) return;
   restoring = true;
   try {
-    if (s.preview) await addPreview(state.index ??= await loadIndex(), s.preview);
+    const pid = s.preview && await addPreview(state.index ??= await loadIndex(), s.preview, s.vs);
     const name = await speciesName(s.taxon);
     await selectTaxon({ key: s.taxon, name }, { fit: !s.at && !s.official });
     if (s.ranges) for (const b of document.querySelectorAll('#versions input[type=checkbox]')) {
@@ -483,7 +483,7 @@ async function fromHash() {
     if (s.official && state.official) await showOfficial({ fit: !s.at });
     if (s.sdm && state.official) { $('sdm-toggle').checked = true; $('sdm-toggle').dispatchEvent(new Event('change')); }
     if (s.rc) { $('rc-toggle').checked = true; $('rc-toggle').dispatchEvent(new Event('change')); }
-    if (s.at) map.jumpTo({ zoom: s.at[0], center: [s.at[2], s.at[1]] });
+    if (s.at) map.jumpTo({ zoom: s.at[0], center: [s.at[2], s.at[1]] }); if (pid) lineage.compare(pid, !s.at);
   } catch (e) { say(`Could not load taxon ${s.taxon}: ${e.message}`); }
   finally { restoring = false; updateLegend(); writeHash(); lastHash = location.hash; }
 }
