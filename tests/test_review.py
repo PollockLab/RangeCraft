@@ -32,3 +32,13 @@ def test_preview_link_only_for_safe_names(monkeypatch):
     monkeypatch.setattr(review, "git", lambda *a: "a" * 40 + "\n")
     assert "preview=" + "a" * 40 + "/1/x-1.geojson)" in review.preview_link("data/ranges/1/x-1.geojson", "h")
     assert review.preview_link("data/ranges/1/x)[y](z.geojson", "h") == ""
+
+
+def test_records_skips_empty_and_survives_gbif_outage(monkeypatch):
+    assert review.records(1, box(0, 0, 0, 0)) == "0"
+
+    def down(*a):
+        raise review.requests.ConnectionError
+
+    monkeypatch.setattr(review, "gbif_count", down)
+    assert review.records(1, box(0, 0, 1, 1)) == "–"

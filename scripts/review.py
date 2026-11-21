@@ -16,11 +16,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+import requests
+from score import gbif_count
 from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from rangelib import IOU_DUPLICATE, ROOT, RangeError, area_km2, iou, load_range, shape
+from rangelib import IOU_DUPLICATE, ROOT, RangeError, area_km2, iou, load_range, shape, wkt_limited
 
 SITE = "https://pollocklab.github.io/rangecraft/"
 MARKER = "<!-- rangecraft-review -->"
@@ -141,6 +143,16 @@ def preview_link(path: str, head: str) -> str:
     return f" · [**View on RangeCraft next to the official outline**]({url})"
 
 
+def records(taxon_key, geom: BaseGeometry) -> str:
+    """GBIF occurrence count inside geom, or a dash when GBIF is unreachable."""
+    if geom.is_empty or area_km2(geom) < 1:
+        return "0"
+    try:
+        return f"{gbif_count(taxon_key, wkt_limited(geom)[0]):,}"
+    except (requests.RequestException, RangeError, KeyError, ValueError):
+        return "–"
+
+
 def plain(value, limit: int = 200) -> str:
     """PR-supplied text as one line with markdown, HTML and mention characters escaped."""
     text = " ".join(str(value or "").split())[:limit]
@@ -185,18 +197,23 @@ def section(path: str, head: str, base: str) -> str:
     a_old, a_new = area_km2(old), area_km2(new)
     added, removed = area_km2(new.difference(old)), area_km2(old.difference(new))
     score = iou(new, old)
+    key = meta["taxonKey"]
     pct = (lambda v: f"{100 * v / a_old:+.1f}%") if a_old else (lambda v: "")
     lines += [
         "",
         f"Compared with **{plain(ref_rng['meta'].get('author'))}** (`{ref_path.removeprefix('data/ranges/')}`, {why}).",
         "",
-        "| | km² | vs reference |",
-        "|---|---:|---:|",
-        f"| Reference | {fmt(a_old)} | |",
-        f"| Proposed | {fmt(a_new)} | {pct(a_new - a_old)} |",
-        f"| 🟩 Added | {fmt(added)} | {pct(added)} |",
-        f"| 🟥 Removed | {fmt(removed)} | {pct(-removed)} |",
-        f"| Overlap (IoU) | {score:.2f} | |",
+        "| | km² | vs reference | GBIF records |",
+        "|---|---:|---:|---:|",
+        f"| Reference | {fmt(a_old)} | | |",
+        f"| Proposed | {fmt(a_new)} | {pct(a_new - a_old)} | |",
+        f"| 🟩 Added | {fmt(added)} | {pct(added)} | {records(key, new.difference(old))} |",
+        f"| 🟥 Removed | {fmt(removed)} | {pct(-removed)} | {records(key, old.difference(new))} |",
+        f"| Overlap (IoU) | {score:.2f} | | |",
+        "",
+        ("Records in the added area support the change; records in the removed area argue against it. "
+        "Counts are all-time GBIF records with coordinates and no geospatial issue, over an outline "
+        "simplified to fit the GBIF API, so small slivers may be missed."),
     ]
     if score >= IOU_DUPLICATE:
         lines += [
