@@ -5,7 +5,7 @@ import { findOfficial, fetchOutline, sdmTiles, sdmBounds, gbifSearchUrl } from '
 import { loadConsensus, loadConsensusSummary, shareFill, summaryText, kOfN, PALETTE } from './consensus.js';
 import { initDraw, polygonsOf, DRAFT } from './draw.js';
 import { renderBoard, pendingContributors, renderPending, findExpert, expertiseLine, shownName, fmtScore } from './board.js';
-import { buildHash, parseHash } from './share.js';
+import { buildHash, parseHash, addPreview } from './share.js';
 import { initGroups, speciesByGroup } from './groups.js';
 import { initLegend } from './legend.js';
 import { initIucnUi } from './iucn-ui.js';
@@ -471,6 +471,7 @@ async function fromHash() {
   if (!s || (state.taxon?.key === s.taxon && location.hash === lastHash)) return;
   restoring = true;
   try {
+    if (s.preview) await addPreview(state.index ??= await loadIndex(), s.preview);
     const name = await speciesName(s.taxon);
     await selectTaxon({ key: s.taxon, name }, { fit: !s.at && !s.official });
     if (s.ranges) for (const b of document.querySelectorAll('#versions input[type=checkbox]')) {
@@ -486,8 +487,7 @@ async function fromHash() {
   } catch (e) { say(`Could not load taxon ${s.taxon}: ${e.message}`); }
   finally { restoring = false; updateLegend(); writeHash(); lastHash = location.hash; }
 }
-let lastHash = '';
-addEventListener('hashchange', fromHash);
+let lastHash = ''; addEventListener('hashchange', fromHash);
 fromHash();
 
 $('share').addEventListener('click', async () => {

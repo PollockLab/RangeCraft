@@ -49,6 +49,6 @@ export const loadExperts = () => json('data/experts.json', []);
 // Cached as text so each caller gets its own parsed copy.
 const texts = new Map();
 export async function loadRange(file) {
-  if (!texts.has(file)) texts.set(file, fetch(file.startsWith('data/') ? file : `data/ranges/${file}`).then(r => { if (!r.ok) throw new Error(`${file}: ${r.status}`); return r.text(); }));
+  if (!texts.has(file)) texts.set(file, fetch(file.startsWith('data/') || file.startsWith('https://raw.githubusercontent.com/') ? file : `data/ranges/${file}`).then(r => { if (!r.ok) throw new Error(`${file}: ${r.status}`); return r.text(); }));
   try { return JSON.parse(await texts.get(file)); } catch (e) { texts.delete(file); throw e; }
 }
