@@ -10,6 +10,7 @@ Reads data only, never runs PR code: `review.py <base-ref> <head-ref> [out.md]`.
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 import sys
@@ -30,7 +31,7 @@ MAX_GEOJSON = 50_000  # GitHub comments cap at 65,536 characters
 STYLE = {
     "added": {"fill": "#2e9e44", "stroke": "#1f6e2f", "fill-opacity": 0.55},
     "removed": {"fill": "#d1342f", "stroke": "#8f1d1a", "fill-opacity": 0.55},
-    "kept": {"fill": "#8a8a8a", "stroke": "#5c5c5c", "fill-opacity": 0.25},
+    "kept": {"fill": "#8a8a8a", "stroke": "#8a8a8a", "fill-opacity": 0, "stroke-width": 1},
 }
 
 
@@ -132,15 +133,33 @@ def map_block(new: BaseGeometry, old: BaseGeometry) -> list[str]:
     return ["", "```geojson", text, "```", *note]
 
 
-def preview_link(path: str, head: str) -> str:
-    """Markdown link drawing this file at the PR's commit next to the published and official ranges.
+def preview_url(path: str, head: str, vs: str | None = None) -> str:
+    """Site URL drawing this file at the PR's commit, as a revision of range `vs` (green added, red removed).
 
-    Empty unless the path matches what the site accepts, so a crafted file name cannot break out."""
+    Empty unless every part matches what the site accepts, so a crafted file name cannot break out."""
     sha, taxon, name = git("rev-parse", head).strip(), Path(path).parent.name, Path(path).name
     if not (re.fullmatch(r"[0-9a-f]{40}", sha) and taxon.isdigit() and re.fullmatch(r"[\w.-]+\.geojson", name)):
         return ""
     url = f"{SITE}#taxon={taxon}&official=1&preview={sha}/{taxon}/{name}"
-    return f" · [**View on RangeCraft next to the official outline**]({url})"
+    return url + f"&vs={vs}" if vs and re.fullmatch(r"\d+/\w[\w.-]*", vs) else url
+
+
+def largest_changes(new: BaseGeometry, old: BaseGeometry, url: str, n: int = 3) -> list[str]:
+    """Bullets for the n biggest added and removed pieces, each linking to the site zoomed on it."""
+    out = []
+    for icon, verb, g in (("🟩", "added", new.difference(old)), ("🟥", "removed", old.difference(new))):
+        parts = sorted(getattr(g, "geoms", [g]), key=lambda p: -area_km2(p))[:n]
+        for p in parts:
+            km2 = area_km2(p)
+            if km2 < 1:
+                continue
+            c = p.representative_point()
+            span = max(p.bounds[2] - p.bounds[0], p.bounds[3] - p.bounds[1], 0.05)
+            zoom = max(3, min(11, round(9 - math.log2(span))))
+            where = f"{abs(c.y):.2f}°{'N' if c.y >= 0 else 'S'}, {abs(c.x):.2f}°{'E' if c.x >= 0 else 'W'}"
+            label = f"{icon} {fmt(km2)} km² {verb} near {where}"
+            out.append(f"- [{label}]({url}&at={zoom}/{c.y:.4f}/{c.x:.4f})" if url else f"- {label}")
+    return ["", "**Largest changes** (click to zoom in on the map):", "", *out] if out else []
 
 
 def records(taxon_key, geom: BaseGeometry) -> str:
@@ -176,13 +195,17 @@ def section(path: str, head: str, base: str) -> str:
     lines = [
         f"### {plain(meta.get('scientificName') or meta['taxonKey'])} by {who}",
         "",
-        f"`{name}` · basis `{meta.get('basis') or 'unset'}`" + preview_link(path, head),
+        f"`{name}` · basis `{meta.get('basis') or 'unset'}`",
     ]
     if meta.get("message"):
         lines += ["", f"> {plain(meta['message'])}"]
     if meta.get("sources"):
         lines += ["", f"**Sources:** {plain(meta['sources'], 600)}"]
     ref = reference(path, rng, base)
+    vs = ref and ref[0].removeprefix("data/ranges/").removesuffix(".geojson")
+    url = preview_url(path, head, vs)
+    if url:
+        lines[2] += f" · [**Open on RangeCraft: changes vs the reference, with GBIF records**]({url})"
     if ref is None:
         new = rng["geometry"]
         lines += [
@@ -220,6 +243,7 @@ def section(path: str, head: str, base: str) -> str:
             "",
             f"⚠️ Near-duplicate of the reference (IoU ≥ {IOU_DUPLICATE}): little would change.",
         ]
+    lines += largest_changes(new, old, url)
     lines += map_block(new, old)
     return "\n".join(lines) + "\n"
 

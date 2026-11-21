@@ -13,6 +13,7 @@ const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.crea
 
 export function initHistory({ map, state, say, edit, view }) {
   let open = null; // { panel, button }
+  let auto = null; // { id, fit }: open this range's History on its latest revision, as compare() asks
 
   function clearOverlay() {
     for (const [id] of LAYERS) for (const l of [`${id}-line`, id]) if (map.getLayer(l)) map.removeLayer(l);
@@ -43,7 +44,7 @@ export function initHistory({ map, state, say, edit, view }) {
     // An unmessaged root is the first upload: its sources are a citation, not a change message, so they go in the tooltip.
     const head = pr.message ? `Revision by ${shownName(r.author)}, ${r.created}: '${pr.message.length > 140 ? `${pr.message.slice(0, 139)}…` : pr.message}'. ` : `${edit ? 'Revision' : 'Initial range'} by ${shownName(r.author)}, ${r.created}. `;
     const b = el('button', { type: 'button', className: 'rev', title: pr.message || src }, head, el('span', { className: 'muted', textContent: edit ? changeText(d) : '' }));
-    b.addEventListener('click', () => { overlay(d); view('history', fc); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
+    b.addEventListener('click', () => { overlay(d); view('history', fc); b.fitChanges?.(d); say(edit ? 'Green: added vs the previous revision. Red: removed.' : 'Green: the initial range.'); onPick(b, r); });
     return b;
   }
 
@@ -56,6 +57,8 @@ export function initHistory({ map, state, say, edit, view }) {
     const [rev, forks] = await Promise.all([settle(log(graph, r.id)), settle(node.children)]);
     if (open?.panel !== panel) return;
     panel.querySelector('.hist-body').replaceChildren(...list(rev, 'Revisions, oldest first'), ...list(forks, 'Forks of this revision'));
+    const last = auto?.id === r.id && [...panel.querySelectorAll('.rev')].at(rev.length - 1);
+    if (last) { if (auto.fit) last.fitChanges = fitChanges; auto = null; last.click(); delete last.fitChanges; }
   }
 
   // Scroll the log clear of the sticky propose card that covers the bottom of the side panel.
@@ -82,5 +85,17 @@ export function initHistory({ map, state, say, edit, view }) {
     return b;
   }
 
-  return { button, clear };
+  function fitChanges(d) {
+    const b = new maplibregl.LngLatBounds(), walk = c => (typeof c[0] === 'number' ? b.extend(c) : c.forEach(walk));
+    walk([d.added, d.removed]);
+    if (!b.isEmpty()) map.fitBounds(b, { padding: 60, maxZoom: 9 });
+  }
+
+  // Show what range `id` changes against its parent: open its History on the latest revision, fit to the change if asked.
+  function compare(id, fit = true) {
+    auto = { id, fit };
+    document.getElementById(`v-${id}`)?.closest('li')?.querySelector('.hist')?.click();
+  }
+
+  return { button, clear, compare };
 }
